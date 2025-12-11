@@ -1,127 +1,182 @@
-import { genToken } from "../config/token.js";
-import bcrypt from "bcryptjs";
 import { db } from "../config/db.js";
 import { usersTable } from "../drizzle/schema.js";
 import { eq } from "drizzle-orm";
+import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import crypto from "crypto";
 
-export const Logout = async (req, res) => {
-  try {
-    res.clearCookie("token");
-    res.status(200).json({ message: "Logged out successfully" });
-  } catch (error) {
-    res.status(500).json({ message: " error during Log out" });
-  }
-};
-
+// Sign Up
 export const signUp = async (req, res) => {
   try {
-    let { userName, email, password } = req.body;
-    email = req.body.email.toLowerCase();
+    const { userName, email, password, name } = req.body;
 
-    // 1. Check username existence
-    const userNameExists = await db
+    // Validate input
+    if (!userName || !email || !password) {
+      return res.status(400).json({ 
+        message: "Username, email, and password are required" 
+      });
+    }
+
+    // Check if user already exists
+    const [existingUser] = await db
+      .select()
+      .from(usersTable)
+      .where(eq(usersTable.email, email));
+
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
+    }
+
+    // Check if username is taken
+    const [existingUserName] = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.userName, userName));
 
-    if (userNameExists.length > 0) {
-      return res.status(400).json({ message: "username already exists" });
+    if (existingUserName) {
+      return res.status(400).json({ message: "Username is already taken" });
     }
 
-    // 3. Check email existence
-    const emailExists = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.email, email));
-
-    if (emailExists.length > 0) {
-      return res.status(400).json({ message: "email already exists" });
-    }
-
-    // 4. Password validation
-    if (password.length < 6) {
-      return res.status(400).json({
-        message: "password must be at least 6 characters long",
-      });
-    }
-
-    // 5. Hash password
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // 6. Insert user
+    // Create user with UUID for consistency
+    const userId = crypto.randomUUID();
     const [newUser] = await db
       .insert(usersTable)
       .values({
+        id: userId,
         userName,
         email,
         password: hashedPassword,
+        name: name || userName,
+        isOnline: false,
       })
-      .returning(); // equivalent of Mongo create()
+      .returning();
 
-    // 7. Generate token
-    const token = genToken(newUser.id);
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: newUser.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-    // 8. Cookie
+    // Set cookie
     res.cookie("token", token, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: "None",
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    return res.status(201).json({ user: newUser, token });
-  } catch (error) {
-  console.error("SIGNUP ERROR:", error);
-  return res.status(500).json({
-    message: "Internal server error during signup",
-    error: error.message,
-    full: error   // <-- SHOW FULL ERROR
-  });
-}
+    // Return user data (without password)
+    const { password: _, ...userWithoutPassword } = newUser;
 
+    res.status(201).json({
+      message: "User created successfully",
+      user: userWithoutPassword,
+      token,
+    });
+  } catch (error) {
+    console.error("Signup error:", error);
+    res.status(500).json({ 
+      message: "Error creating user", 
+      error: error.message 
+    });
+  }
 };
 
+// Login
 export const Login = async (req, res) => {
   try {
-    let { email, password } = req.body;
-     email = req.body.email.toLowerCase();
+    const { email, password } = req.body;
 
-    // 1. Find user by email
-    const users = await db
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ 
+        message: "Email and password are required" 
+      });
+    }
+
+    // Find user
+    const [user] = await db
       .select()
       .from(usersTable)
       .where(eq(usersTable.email, email));
 
-    const user = users[0];
-
     if (!user) {
-      return res.status(400).json({ message: "User does not exist" });
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // 2. Compare password
-    const isPasswordMatch = await bcrypt.compare(password, user.password);
-    if (!isPasswordMatch) {
-      return res.status(400).json({ message: "Invalid password" });
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // 3. Generate token
-    const token = genToken(user.id);
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-    // 4. Set cookie
+    // Set cookie
     res.cookie("token", token, {
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      // sameSite: "None",
-      // secure: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    return res.status(200).json({ user, token });
-  } catch (error) {
-  console.error("LOGIN ERROR:", error);
-  return res.status(500).json({
-    message: "Internal server error during login",
-    error: error.message,
-    full: error   // <-- SHOW REAL ERROR
-  });
-}
+    // Update user online status
+    await db
+      .update(usersTable)
+      .set({ isOnline: true, lastSeen: new Date() })
+      .where(eq(usersTable.id, user.id));
 
+    // Return user data (without password)
+    const { password: _, ...userWithoutPassword } = user;
+
+    res.json({
+      message: "Login successful",
+      user: userWithoutPassword,
+      token,
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+    res.status(500).json({ 
+      message: "Error logging in", 
+      error: error.message 
+    });
+  }
+};
+
+// Logout
+export const Logout = async (req, res) => {
+  try {
+    // Update user status to offline if authenticated
+    if (req.userId) {
+      await db
+        .update(usersTable)
+        .set({ isOnline: false, lastSeen: new Date() })
+        .where(eq(usersTable.id, req.userId));
+    }
+
+    // Clear cookie
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+    });
+
+    res.json({ message: "Logout successful" });
+  } catch (error) {
+    console.error("Logout error:", error);
+    res.status(500).json({ 
+      message: "Error logging out", 
+      error: error.message 
+    });
+  }
 };

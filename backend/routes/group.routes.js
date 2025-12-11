@@ -1,28 +1,80 @@
-// routes/group.routes.js
-
 import express from "express";
+import jwt from "jsonwebtoken";
 import { db } from "../config/db.js";
 import { groupsTable, groupMembersTable, messagesTable, usersTable } from "../drizzle/schema.js";
 import { eq, and, desc } from "drizzle-orm";
 
 const router = express.Router();
 
-// Middleware to check authentication (adjust based on your auth setup)
+// FIXED: Proper authentication middleware that extracts user ID from JWT
 const authenticateUser = async (req, res, next) => {
   try {
-    // Get user from your auth session
-    // This depends on your better-auth setup
-    const userId = req.session?.userId || req.user?.id;
-    if (!userId) {
-      return res.status(401).json({ error: "Unauthorized" });
+    // Get token from cookies
+    let token = req.cookies.token;
+    
+    console.log("Raw token from cookies:", token);
+    
+    if (!token) {
+      return res.status(401).json({ error: "Unauthorized - No token provided" });
     }
-    req.userId = userId;
+
+    // Handle case where token might be JSON stringified
+    if (typeof token === 'object') {
+      token = token.token || JSON.stringify(token);
+    }
+
+    // If token is a string that looks like JSON, try to parse it
+    if (typeof token === 'string' && (token.startsWith('{') || token.startsWith('j:'))) {
+      try {
+        // Remove 'j:' prefix if present (added by cookie-parser for JSON cookies)
+        if (token.startsWith('j:')) {
+          token = token.substring(2);
+        }
+        const parsed = JSON.parse(token);
+        if (parsed.token) {
+          token = parsed.token;
+        }
+      } catch (e) {
+        // If parsing fails, use token as is
+        console.log("Token parsing failed, using as is");
+      }
+    }
+
+    console.log("Processed token:", token);
+
+    // Verify JWT token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    console.log("Decoded token:", decoded);
+
+    if (!decoded || !decoded.userId) {
+      return res.status(401).json({ error: "Unauthorized - Invalid token structure" });
+    }
+
+    // Attach user ID to request
+    req.userId = decoded.userId;
+    console.log("Authenticated user ID:", req.userId);
+     console.log("📊 User ID type:", typeof req.userId);
+
+    // ADDED: Verify user exists in database
+    const [user] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.userId));
+    
+    if (!user) {
+      console.error("❌ User not found in database:", req.userId);
+      return res.status(401).json({ error: "User not found" });
+    }
+    
+    console.log("✅ User verified in database:", user.id);
+    
     next();
   } catch (error) {
-    res.status(401).json({ error: "Authentication failed" });
+    console.error("Authentication error:", error.message);
+    res.status(401).json({ error: "Authentication failed: " + error.message });
   }
 };
-
 // Create a new group
 router.post("/create", authenticateUser, async (req, res) => {
   try {
@@ -55,7 +107,7 @@ router.post("/create", authenticateUser, async (req, res) => {
     res.status(201).json({ group: newGroup });
   } catch (error) {
     console.error("Error creating group:", error);
-    res.status(500).json({ error: "Failed to create group" });
+    res.status(500).json({ error: "Failed to create group", details: error.message });
   }
 });
 
@@ -113,6 +165,7 @@ router.get("/:groupId", authenticateUser, async (req, res) => {
         id: usersTable.id,
         name: usersTable.name,
         email: usersTable.email,
+        userName: usersTable.userName,
         role: groupMembersTable.role,
         joinedAt: groupMembersTable.joinedAt,
       })
@@ -157,6 +210,7 @@ router.get("/:groupId/messages", authenticateUser, async (req, res) => {
         isEdited: messagesTable.isEdited,
         senderId: messagesTable.senderId,
         senderName: usersTable.name,
+        senderUserName: usersTable.userName,
         senderEmail: usersTable.email,
       })
       .from(messagesTable)
@@ -173,7 +227,7 @@ router.get("/:groupId/messages", authenticateUser, async (req, res) => {
   }
 });
 
-// Send a message (also handled via socket, but endpoint for consistency)
+// Send a message (REST endpoint as backup to socket)
 router.post("/:groupId/messages", authenticateUser, async (req, res) => {
   try {
     const { groupId } = req.params;

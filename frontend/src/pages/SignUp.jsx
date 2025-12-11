@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { serverUrl } from "../main";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,41 +9,41 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Eye, EyeOff, Loader2, MessageSquare, UserPlus } from "lucide-react";
 
 const SignUp = () => {
-  let navigate = useNavigate();
-
+  const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [userName, setUserName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  let [loading, setLoading] = useState(false);
-  let [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleSignUp = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(false);
+
     try {
       const result = await axios.post(
-        `${serverUrl}/api/auth/signup`,
-        {
-          userName,
-          email,
-          password,
-        },
+        "http://localhost:8000/api/auth/signup",
+        { userName, email, password },
         { withCredentials: true }
       );
 
-      console.log("Success:", result.data);
+      console.log("Signup successful:", result.data);
+      
       setEmail("");
       setPassword("");
       setUserName("");
       setLoading(false);
-      setError(false);
-      navigate("/login");
+      
+      // Navigate directly to home since we get token in signup
+      localStorage.setItem("user", JSON.stringify(result.data.user));
+      navigate("/");
+      
     } catch (error) {
-      console.log("Error details:", error.response?.data);
-      console.log("Status:", error.response?.status);
+      console.error("Signup error:", error.response?.data);
       setLoading(false);
-      setError(error?.response?.data?.message);
+      setError(error?.response?.data?.message || "Signup failed. Please try again.");
     }
   };
 
@@ -112,6 +111,7 @@ const SignUp = () => {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
+                    minLength={6}
                     className="h-11 pr-10 border-slate-300 focus:border-cyan-500 focus:ring-cyan-500"
                   />
                   <button

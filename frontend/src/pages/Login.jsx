@@ -1,63 +1,49 @@
-import { createAuthClient } from "better-auth/client";
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { serverUrl } from "../main";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Eye, EyeOff, Github, Loader2, MessageSquare } from "lucide-react";
-
-const authClient = createAuthClient({
-  baseURL: "http://localhost:8000",
-  basePath: "/api/better-auth",
-});
+import { Eye, EyeOff, Loader2, MessageSquare } from "lucide-react";
 
 const Login = () => {
-  let navigate = useNavigate();
-
+  const navigate = useNavigate();
   const [show, setShow] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  let [loading, setLoading] = useState(false);
-  let [error, setError] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(false);
+
     try {
       const result = await axios.post(
-        `${serverUrl}/api/auth/login`,
+        "http://localhost:8000/api/auth/login",
         { email, password },
         { withCredentials: true }
       );
-      console.log("Login successful:", result);
+
+      console.log("Login successful:", result.data);
+      
+      // Store user in localStorage
+      localStorage.setItem("user", JSON.stringify(result.data.user));
+      
       setEmail("");
       setPassword("");
       setLoading(false);
-      setError(false);
-      console.log("login successfull", result);
+      
+      // Navigate to home page
       navigate("/");
+      
     } catch (error) {
-      console.log("Error details:", error.response?.data);
-      console.log("Status:", error.response?.status);
+      console.error("Login error:", error.response?.data);
       setLoading(false);
-      setError(error?.response?.data?.message);
-    }
-  };
-
-  const handleLoginWithGitHub = async (e) => {
-    e.preventDefault();
-    try {
-      await authClient.signIn.social({
-        provider: "github",
-        redirectURL: "http://localhost:5173/auth/callback"
-      });
-    } catch (error) {
-      console.error("GitHub login error:", error);
-      setError("GitHub login failed");
+      setError(error?.response?.data?.message || "Login failed. Please try again.");
     }
   };
 
@@ -146,27 +132,6 @@ const Login = () => {
                 )}
               </Button>
             </form>
-
-            {/* Divider */}
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-300" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-slate-500">Or continue with</span>
-              </div>
-            </div>
-
-            {/* GitHub Login Button */}
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-11 border-slate-300 hover:bg-slate-50 font-semibold"
-              onClick={handleLoginWithGitHub}
-            >
-              <Github className="mr-2 h-5 w-5" />
-              Sign in with GitHub
-            </Button>
           </CardContent>
 
           <CardFooter className="flex flex-col space-y-2">

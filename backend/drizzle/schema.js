@@ -3,68 +3,74 @@ import {
   varchar,
   text,
   timestamp,
-  integer,
   uuid,
   boolean,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+
+// Users table
 export const usersTable = pgTable("users", {
-  id: integer().primaryKey().generatedAlwaysAsIdentity(),
-
+  id: varchar("id", { length: 255 }).primaryKey(),
   name: varchar("name", { length: 255 }),
-
   userName: varchar("user_name", { length: 255 }).notNull().unique(),
-
   email: varchar("email", { length: 255 }).notNull().unique(),
-
   password: varchar("password", { length: 255 }).notNull(),
-
   image: text("image").default(""),
-
+  isOnline: boolean("is_online").default(false),
+  lastSeen: timestamp("last_seen").defaultNow(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// group table
+// Groups table
 export const groupsTable = pgTable("groups", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   description: text("description"),
-  createdBy: uuid("created_by")
+  isPrivate: boolean("is_private").default(false),
+  createdBy: varchar("created_by", { length: 255 })
     .notNull()
     .references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// group Members table
+// Group Members table
 export const groupMembersTable = pgTable("group_members", {
   id: uuid("id").primaryKey().defaultRandom(),
   groupId: uuid("group_id")
     .notNull()
     .references(() => groupsTable.id, { onDelete: "cascade" }),
-  userId: uuid("user_id")
+  userId: varchar("user_id", { length: 255 })
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   role: text("role").default("member"), // 'admin' or 'member'
   joinedAt: timestamp("joined_at").defaultNow(),
 });
 
-// messages table
+// Messages table (for both group and direct messages)
 export const messagesTable = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
-  groupId: uuid("group_id")
-    .notNull()
-    .references(() => groupsTable.id, { onDelete: "cascade" }),
-  senderId: uuid("sender_id")
+  groupId: uuid("group_id").references(() => groupsTable.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id", { length: 255 })
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
+  receiverId: varchar("receiver_id", { length: 255 })
+    .references(() => usersTable.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
+  messageType: text("message_type").default("text"), // 'text', 'image', 'file'
   createdAt: timestamp("created_at").defaultNow(),
   isEdited: boolean("is_edited").default(false),
+  isRead: boolean("is_read").default(false),
 });
+
 // Relations
+export const usersRelations = relations(usersTable, ({ many }) => ({
+  createdGroups: many(groupsTable),
+  groupMemberships: many(groupMembersTable),
+  sentMessages: many(messagesTable),
+}));
+
 export const groupsRelations = relations(groupsTable, ({ one, many }) => ({
   creator: one(usersTable, {
     fields: [groupsTable.createdBy],
@@ -95,6 +101,10 @@ export const messagesRelations = relations(messagesTable, ({ one }) => ({
   }),
   sender: one(usersTable, {
     fields: [messagesTable.senderId],
+    references: [usersTable.id],
+  }),
+  receiver: one(usersTable, {
+    fields: [messagesTable.receiverId],
     references: [usersTable.id],
   }),
 }));
