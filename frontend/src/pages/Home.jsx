@@ -90,7 +90,7 @@ const Home = () => {
         }
 
         const user = JSON.parse(userData);
-        console.log("✅ User data loaded:", user);
+        // console.log(" User data loaded:", user);
         setCurrentUser(user);
         setEditName(user.name || user.userName || "");
         setEditEmail(user.email || "");
@@ -109,7 +109,7 @@ const Home = () => {
   useEffect(() => {
     if (!currentUser || socketInitialized.current) return;
 
-    console.log("🔌 Initializing socket connection for user:", currentUser.id);
+    // console.log(" Initializing socket connection for user:", currentUser.id);
     socketInitialized.current = true;
 
     // Ensure socket is disconnected first
@@ -126,13 +126,13 @@ const Home = () => {
 
     // Socket event listeners
     socket.on("connect", () => {
-      console.log("✅ Socket connected successfully:", socket.id);
+      console.log(" Socket connected successfully:", socket.id);
       setSocketConnected(true);
 
       // Refresh user list to get current online status when socket connects
       const refreshUserStatus = async () => {
         try {
-          console.log("🔄 Refreshing user list after socket connection...");
+          console.log(" Refreshing user list after socket connection...");
           const response = await axios.get("http://localhost:8000/api/user/all", {
             withCredentials: true,
           });
@@ -143,10 +143,10 @@ const Home = () => {
             );
             setUsers(otherUsers);
             setFilteredUsers(otherUsers);
-            console.log("✅ User list refreshed with current online status");
+            console.log(" User list refreshed with current online status");
           }
         } catch (error) {
-          console.error("❌ Error refreshing user list:", error);
+          console.error(" Error refreshing user list:", error);
         }
       };
 
@@ -154,18 +154,18 @@ const Home = () => {
     });
 
     socket.on("connect_error", (error) => {
-      console.error("❌ Socket connection error:", error.message);
+      console.error(❌ Socket connection error:", error.message);
       setSocketConnected(false);
     });
 
     socket.on("disconnect", (reason) => {
-      console.log("❌ Socket disconnected. Reason:", reason);
+      console.log(" Socket disconnected. Reason:", reason);
       setSocketConnected(false);
     });
 
     // Listen for user online status
     socket.on("user_online", (onlineUser) => {
-      console.log("👤 User came online:", onlineUser);
+      console.log(" User came online:", onlineUser);
       setUsers((prevUsers) => {
         const exists = prevUsers.find(u => u.id === onlineUser.id);
         if (exists) {
@@ -179,7 +179,7 @@ const Home = () => {
 
     // Listen for user status changes
     socket.on("user_status_change", ({ userId, isOnline }) => {
-      console.log(`📊 User status changed: ${userId} - ${isOnline ? 'online' : 'offline'}`);
+      console.log(` User status changed: ${userId} - ${isOnline ? 'online' : 'offline'}`);
       setUsers((prevUsers) =>
         prevUsers.map((u) =>
           u.id === userId ? { ...u, isOnline } : u
@@ -189,34 +189,34 @@ const Home = () => {
 
     // Listen for direct messages
     socket.on("receive_direct_message", (messageData) => {
-      console.log("📨 Received direct message:", messageData);
-      console.log("📨 Sender ID:", messageData.senderId, "Content:", messageData.content, "Created At:", messageData.createdAt);
+      console.log(" Received direct message:", messageData);
+      console.log(" Sender ID:", messageData.senderId, "Content:", messageData.content, "Created At:", messageData.createdAt);
 
       // Add message to chat if it's from the currently selected user
       if (selectedUser && !selectedGroup &&
           (messageData.senderId === selectedUser.id ||
            messageData.receiverId === selectedUser.id)) {
-        console.log("💬 Adding message to chat");
+        console.log(" Adding message to chat");
         setMessages((prevMessages) => [...prevMessages, messageData]);
       }
 
       // Update user list with new last message
       // This updates the sender's last message in the receiver's list
-      console.log("🔄 Updating user list with last message from sender:", messageData.senderId);
+      console.log(" Updating user list with last message from sender:", messageData.senderId);
       setUsers((prevUsers) => {
-        console.log("📝 Current users in state before update:", prevUsers.length);
+        console.log(" Current users in state before update:", prevUsers.length);
 
         // Check if sender exists in users list
         const senderExists = prevUsers.some(u => u.id === messageData.senderId);
-        console.log("🔍 Sender exists in users list:", senderExists);
+        console.log(" Sender exists in users list:", senderExists);
 
         if (!senderExists) {
-          console.log("⚠️ SENDER NOT IN LIST! This might be the issue. Users list:", prevUsers.map(u => ({id: u.id, name: u.userName})));
+          console.log(" SENDER NOT IN LIST! This might be the issue. Users list:", prevUsers.map(u => ({id: u.id, name: u.userName})));
         }
 
         const updated = prevUsers.map((u) => {
           if (u.id === messageData.senderId) {
-            console.log("✅ Found sender in users list, updating lastMessage:", {
+            console.log(" Found sender in users list, updating lastMessage:", {
               content: messageData.content,
               createdAt: messageData.createdAt,
               senderId: messageData.senderId
@@ -235,22 +235,22 @@ const Home = () => {
           }
           return u;
         });
-        console.log("📝 Updated users list:", updated);
+        console.log(" Updated users list:", updated);
         return updated;
       });
     });
 
     // Listen for message sent confirmation (for sender's UI update)
     socket.on("message_sent", (messageData) => {
-      console.log("📤 Message sent confirmation:", messageData);
-      console.log("📤 Receiver ID:", messageData.receiverId, "Content:", messageData.content);
+      console.log(" Message sent confirmation:", messageData);
+      console.log(" Receiver ID:", messageData.receiverId, "Content:", messageData.content);
 
       // Update user list to show the message in the receiver's entry
       setUsers((prevUsers) => {
-        console.log("📝 Updating sender's user list, total users:", prevUsers.length);
+        console.log(" Updating sender's user list, total users:", prevUsers.length);
         const updated = prevUsers.map((u) => {
           if (u.id === messageData.receiverId) {
-            console.log("✅ Found receiver in users list, updating lastMessage");
+            console.log(" Found receiver in users list, updating lastMessage");
             return {
               ...u,
               lastMessage: {
@@ -262,14 +262,14 @@ const Home = () => {
           }
           return u;
         });
-        console.log("📝 Updated users list after message_sent:", updated);
+        console.log(" Updated users list after message_sent:", updated);
         return updated;
       });
     });
 
     // Listen for group messages
     socket.on("receive_group_message", (messageData) => {
-      console.log("📨 Received group message:", messageData);
+      console.log(" Received group message:", messageData);
 
       // Add message to chat if it's in the currently selected group
       if (selectedGroup && messageData.groupId === selectedGroup.id) {
@@ -296,7 +296,7 @@ const Home = () => {
 
     // Listen for new groups created (real-time sync)
     socket.on("group_created", (groupData) => {
-      console.log("📁 New group created:", groupData);
+      console.log(" New group created:", groupData);
       // Add group to list if current user is a member
       if (groupData.memberIds && groupData.memberIds.includes(currentUser.id)) {
         setGroups((prevGroups) => {
@@ -311,7 +311,7 @@ const Home = () => {
 
     // Listen for being added to a group
     socket.on("added_to_group", (groupData) => {
-      console.log("➕ Added to group:", groupData);
+      console.log(" Added to group:", groupData);
       setGroups((prevGroups) => {
         const exists = prevGroups.find(g => g.id === groupData.id);
         if (!exists) {
@@ -322,34 +322,34 @@ const Home = () => {
     });
 
     socket.on("message_sent", (messageData) => {
-      console.log("✅ Message sent confirmed:", messageData);
+      console.log(" Message sent confirmed:", messageData);
     });
 
     socket.on("message_error", (error) => {
-      console.error("❌ Message error:", error);
+      console.error(" Message error:", error);
       alert("Failed to send message: " + error.error);
     });
 
     // Listen for profile updates from server (broadcasts to all connected clients)
     socket.on("profile_updated", (data) => {
-      console.log("👤 Profile updated from server:", data);
-      console.log("🌐 Current user ID:", currentUser?.id, "Updated user ID:", data.userId);
+      console.log(" Profile updated from server:", data);
+      console.log(" Current user ID:", currentUser?.id, "Updated user ID:", data.userId);
 
       // If it's the current user's profile that was updated
       if (data.userId === currentUser?.id) {
-        console.log("🔄 Updating CURRENT user profile in state and localStorage:", data.user);
+        console.log(" Updating CURRENT user profile in state and localStorage:", data.user);
         setCurrentUser(data.user);
         localStorage.setItem("user", JSON.stringify(data.user));
-        console.log("✅ Current user updated in localStorage");
+        console.log(" Current user updated in localStorage");
       } else {
-        console.log("👥 Updating OTHER user profile in users list");
+        console.log(" Updating OTHER user profile in users list");
       }
 
       // Update the user in the users list if they exist
       setUsers((prevUsers) => {
         const updated = prevUsers.map((u) => {
           if (u.id === data.userId) {
-            console.log("📝 Updating user in list:", data.userId, "with new data:", data.user);
+            console.log(" Updating user in list:", data.userId, "with new data:", data.user);
             return { ...u, ...data.user };
           }
           return u;
@@ -359,13 +359,13 @@ const Home = () => {
 
       // Update the selected user if it's the one being viewed
       if (selectedUser?.id === data.userId) {
-        console.log("📋 Updating selected user:", data.userId);
+        console.log(" Updating selected user:", data.userId);
         setSelectedUser({ ...selectedUser, ...data.user });
       }
     });
 
     return () => {
-      console.log("🧹 Cleaning up socket listeners");
+      console.log(" Cleaning up socket listeners");
       socket.off("connect");
       socket.off("connect_error");
       socket.off("disconnect");
@@ -386,7 +386,7 @@ const Home = () => {
   // Populate edit form fields when dialog opens or currentUser changes
   useEffect(() => {
     if (showEditProfile && currentUser) {
-      console.log("📝 Populating edit form with current user data:", currentUser);
+      console.log(" Populating edit form with current user data:", currentUser);
       setEditName(currentUser.name || currentUser.userName || "");
       setEditEmail(currentUser.email || "");
       setEditImage(currentUser.image || "");
@@ -410,12 +410,12 @@ const Home = () => {
       if (!currentUser) return;
 
       try {
-        console.log("👥 Fetching users...");
+        console.log(" Fetching users...");
         const response = await axios.get("http://localhost:8000/api/user/all", {
           withCredentials: true,
         });
 
-        console.log("✅ Fetched users:", response.data);
+        console.log(" Fetched users:", response.data);
 
         // Filter out current user
         const otherUsers = response.data.users.filter(
@@ -441,17 +441,17 @@ const Home = () => {
       if (!currentUser) return;
 
       try {
-        console.log("📁 Fetching groups...");
+        console.log(" Fetching groups...");
         const response = await axios.get("http://localhost:8000/api/groups/my-groups", {
           withCredentials: true,
         });
 
-        console.log("✅ Fetched groups:", response.data);
+        console.log(" Fetched groups:", response.data);
         setGroups(response.data.groups || []);
         setFilteredGroups(response.data.groups || []);
         setLoading(false);
       } catch (error) {
-        console.error("❌ Error fetching groups:", error);
+        console.error(" Error fetching groups:", error);
         setLoading(false);
       }
     };
@@ -492,12 +492,12 @@ const Home = () => {
       if (!selectedUser || selectedGroup) return;
 
       try {
-        console.log("💬 Fetching messages with:", selectedUser.id);
+        console.log(" Fetching messages with:", selectedUser.id);
         const response = await axios.get(
           `http://localhost:8000/api/messages/direct/${selectedUser.id}`,
           { withCredentials: true }
         );
-        console.log("✅ Fetched messages:", response.data);
+        console.log(" Fetched messages:", response.data);
         setMessages(response.data.messages || []);
 
         // Mark messages as read
@@ -531,12 +531,12 @@ const Home = () => {
       if (!selectedGroup || selectedUser) return;
 
       try {
-        console.log("💬 Fetching group messages for:", selectedGroup.id);
+        // console.log(" Fetching group messages for:", selectedGroup.id);
         const response = await axios.get(
           `http://localhost:8000/api/groups/${selectedGroup.id}/messages`,
           { withCredentials: true }
         );
-        console.log("✅ Fetched group messages:", response.data);
+        // console.log(" Fetched group messages:", response.data);
         setMessages(response.data.messages || []);
 
         // Join the group room via socket
@@ -682,7 +682,7 @@ const Home = () => {
         { withCredentials: true }
       );
 
-      console.log("✅ Group created:", response.data);
+      // console.log(" Group created:", response.data);
 
       // Add new group to list
       setGroups((prev) => [...prev, { ...response.data.group, role: "admin" }]);
@@ -714,7 +714,7 @@ const Home = () => {
     setUpdatingProfile(true);
 
     try {
-      console.log("📤 Sending profile update to server...");
+      // console.log(" Sending profile update to server...");
       const response = await axios.put(
         "http://localhost:8000/api/user/update",
         {
@@ -725,17 +725,17 @@ const Home = () => {
         { withCredentials: true }
       );
 
-      console.log("✅ Profile updated from server:", response.data);
+      // console.log(" Profile updated from server:", response.data);
 
       // Update current user with fresh data
       const updatedUser = response.data.user;
-      console.log("🔄 Updated user object:", updatedUser);
-      console.log("👤 Current user ID:", currentUser?.id);
+      // console.log(" Updated user object:", updatedUser);
+      // console.log(" Current user ID:", currentUser?.id);
 
       // Update state and localStorage immediately
       setCurrentUser(updatedUser);
       localStorage.setItem("user", JSON.stringify(updatedUser));
-      console.log("💾 Updated user saved to localStorage");
+      // console.log(" Updated user saved to localStorage");
 
       // Update users list immediately (don't wait for socket event)
       setUsers((prevUsers) =>
@@ -743,12 +743,12 @@ const Home = () => {
           u.id === updatedUser.id ? { ...u, ...updatedUser } : u
         )
       );
-      console.log("📝 Users list updated with new profile data");
+      // console.log(" Users list updated with new profile data");
 
       // Update selected user if it's the one being viewed
       if (selectedUser?.id === updatedUser.id) {
         setSelectedUser(updatedUser);
-        console.log("📋 Selected user updated with new profile data");
+        // console.log("Selected user updated with new profile data");
       }
 
       // Force a re-render by updating edit fields too
@@ -757,10 +757,10 @@ const Home = () => {
       setEditImage(updatedUser.image || "");
 
       setShowEditProfile(false);
-      console.log("✅ Profile dialog closed - waiting for socket broadcast");
+      // console.log(" Profile dialog closed - waiting for socket broadcast");
       alert("Profile updated successfully!");
     } catch (error) {
-      console.error("❌ Error updating profile:", error);
+      // console.error(" Error updating profile:", error);
       alert("Failed to update profile: " + (error.response?.data?.message || error.message));
     } finally {
       setUpdatingProfile(false);
@@ -787,7 +787,7 @@ const Home = () => {
       socket.disconnect();
       navigate("/login");
     } catch (error) {
-      console.error("❌ Logout error:", error);
+      // console.error(" Logout error:", error);
       localStorage.removeItem("user");
       localStorage.removeItem("token");
       socket.disconnect();

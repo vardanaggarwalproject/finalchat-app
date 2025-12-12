@@ -19,23 +19,23 @@ const getTokenFromCookie = () => {
 // Helper function to check if user is authenticated
 const isAuthenticated = () => {
   try {
-    const token = getTokenFromCookie();
+    // const token = getTokenFromCookie();
     const user = localStorage.getItem('user');
     
     // For authentication, we primarily rely on localStorage user data
     // The cookie will be sent automatically with requests
     const isAuth = !!user;
     
-    console.log('🔐 Auth check:', { 
-      hasToken: !!token, 
-      hasUser: !!user, 
-      isAuthenticated: isAuth,
-      allCookies: document.cookie
-    });
+    // console.log('🔐 Auth check:', { 
+    //   hasToken: !!token, 
+    //   hasUser: !!user, 
+    //   isAuthenticated: isAuth,
+    //   allCookies: document.cookie
+    // });
     
     return isAuth;
   } catch (error) {
-    console.error('❌ Auth check error:', error);
+    console.error(' Auth check error:', error);
     return false;
   }
 };
@@ -44,14 +44,14 @@ const isAuthenticated = () => {
 const ProtectedRoute = ({ children }) => {
   const isAuth = isAuthenticated();
   
-  console.log('🛡️ Protected route check:', isAuth);
+  console.log('Protected route check:', isAuth);
   
   if (!isAuth) {
-    console.log('❌ Not authenticated, redirecting to login');
+    console.log(' Not authenticated, redirecting to login');
     return <Navigate to="/login" replace />;
   }
   
-  console.log('✅ Authenticated, rendering protected content');
+  console.log('Authenticated, rendering protected content');
   return children;
 };
 
@@ -59,14 +59,14 @@ const ProtectedRoute = ({ children }) => {
 const AuthRoute = ({ children }) => {
   const isAuth = isAuthenticated();
   
-  console.log('🔓 Auth route check:', isAuth);
+  console.log(' Auth route check:', isAuth);
   
   if (isAuth) {
-    console.log('✅ Already authenticated, redirecting to home');
+    console.log('Already authenticated, redirecting to home');
     return <Navigate to="/" replace />;
   }
   
-  console.log('❌ Not authenticated, rendering auth page');
+  console.log('Not authenticated, rendering auth page');
   return children;
 };
 

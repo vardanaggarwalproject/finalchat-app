@@ -24,14 +24,14 @@ userRouter.put("/update", isAuth, async (req, res) => {
 
     // Broadcast profile update via socket if update was successful
     if (req.io && res.locals.updatedUser) {
-      console.log("📡 Broadcasting profile update for user:", res.locals.updatedUser.id);
+      // console.log(" Broadcasting profile update for user:", res.locals.updatedUser.id);
       // Broadcast to ALL connected clients (including other browser windows/tabs)
       // Use io.emit() to send to all connected sockets across all rooms
       req.io.emit("profile_updated", {
         userId: res.locals.updatedUser.id,
         user: res.locals.updatedUser
       });
-      console.log("✅ Profile update broadcasted to all clients");
+      // console.log("Profile update broadcasted to all clients");
     }
   } catch (error) {
     console.error("Profile update route error:", error);

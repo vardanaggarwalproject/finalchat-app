@@ -31,6 +31,6 @@ export async function initAuth() {
     experimental: { joins: true },
    
   });
-  console.log(`better-auth initialized with MongoDB adapter`);
+  // console.log(`better-auth initialized with MongoDB adapter`);
   return authInstance;
 }

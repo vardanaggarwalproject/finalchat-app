@@ -8,7 +8,7 @@ export const getDirectMessages = async (req, res) => {
     const userId = req.userId;
     const { userId: otherUserId } = req.params;
 
-    console.log(`📬 Fetching messages between ${userId} and ${otherUserId}`);
+    // console.log(` Fetching messages between ${userId} and ${otherUserId}`);
 
     // Fetch messages where either:
     // 1. Current user sent to other user
@@ -46,10 +46,10 @@ export const getDirectMessages = async (req, res) => {
       )
       .orderBy(messagesTable.createdAt);
 
-    console.log(`✅ Found ${messages.length} messages`);
+    // console.log(` Found ${messages.length} messages`);
     res.json({ messages });
   } catch (error) {
-    console.error("Error fetching direct messages:", error);
+    // console.error("Error fetching direct messages:", error);
     res.status(500).json({ 
       message: "Error fetching messages", 
       error: error.message 
@@ -100,7 +100,7 @@ export const sendDirectMessage = async (req, res) => {
 
     res.status(201).json({ message: messageData });
   } catch (error) {
-    console.error("Error sending direct message:", error);
+    // console.error("Error sending direct message:", error);
     res.status(500).json({ 
       message: "Error sending message", 
       error: error.message 
@@ -142,7 +142,7 @@ export const getConversations = async (req, res) => {
 
     res.json({ conversations });
   } catch (error) {
-    console.error("Error fetching conversations:", error);
+    // console.error("Error fetching conversations:", error);
     res.status(500).json({ 
       message: "Error fetching conversations", 
       error: error.message 
@@ -171,7 +171,7 @@ export const markMessagesAsRead = async (req, res) => {
 
     res.json({ message: "Messages marked as read" });
   } catch (error) {
-    console.error("Error marking messages as read:", error);
+    // console.error("Error marking messages as read:", error);
     res.status(500).json({ 
       message: "Error marking messages as read", 
       error: error.message 

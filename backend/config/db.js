@@ -21,7 +21,7 @@ pool.on("error", (err) => {
 (async () => {
   try {
     const res = await pool.query("SELECT NOW()");
-    console.log("Connected at:", res.rows[0].now);
+    // console.log("Connected at:", res.rows[0].now);
   } catch (err) {
     console.error("Connection failed:", err);
   }

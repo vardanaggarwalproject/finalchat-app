@@ -31,7 +31,7 @@ export const getCurrentUser = async (req, res) => {
 
     res.status(200).json({ user: { ...user, isOnline: true } });
   } catch (error) {
-    console.error("Get current user error:", error);
+    // console.error("Get current user error:", error);
     res.status(500).json({ message: "Error fetching user data" });
   }
 };
@@ -162,8 +162,8 @@ export const updateUserProfile = async (req, res) => {
       .from(usersTable)
       .where(eq(usersTable.id, userId));
 
-    console.log("✅ Profile updated for user:", userId);
-    console.log("📡 Updated user data:", updatedUser);
+    // console.log(" Profile updated for user:", userId);
+    // console.log(" Updated user data:", updatedUser);
 
     // Store updated user in response for middleware to broadcast
     res.locals.updatedUser = updatedUser;

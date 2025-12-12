@@ -70,7 +70,7 @@ io.use((socket, next) => {
 
 io.on('connection', async (socket) => {
   const userId = socket.userId;
-  console.log(`✅ User connected: ${userId} (socket: ${socket.id})`);
+  // console.log(`✅ User connected: ${userId} (socket: ${socket.id})`);
 
   // Store active user
   activeUsers.set(userId, socket.id);
@@ -116,7 +116,7 @@ io.on('connection', async (socket) => {
   socket.on("join_group", async (data) => {
     const { groupId } = data;
     socket.join(`group:${groupId}`);
-    console.log(`📥 User ${userId} joined group ${groupId}`);
+    // console.log(`📥 User ${userId} joined group ${groupId}`);
 
     socket.to(`group:${groupId}`).emit("user_joined_group", {
       userId,
@@ -128,7 +128,7 @@ io.on('connection', async (socket) => {
   socket.on("leave_group", (data) => {
     const { groupId } = data;
     socket.leave(`group:${groupId}`);
-    console.log(`📤 User ${userId} left group ${groupId}`);
+    // console.log(`📤 User ${userId} left group ${groupId}`);
 
     socket.to(`group:${groupId}`).emit("user_left_group", {
       userId,
@@ -177,7 +177,7 @@ io.on('connection', async (socket) => {
       socket.emit("message_sent", messageData);
 
     } catch (error) {
-      console.error("Error sending direct message:", error);
+      // console.error("Error sending direct message:", error);
       socket.emit("message_error", { error: "Failed to send message" });
     }
   });
@@ -217,7 +217,7 @@ io.on('connection', async (socket) => {
       io.to(`group:${groupId}`).emit("receive_group_message", messageData);
 
     } catch (error) {
-      console.error("Error sending group message:", error);
+      // console.error("Error sending group message:", error);
       socket.emit("message_error", { error: "Failed to send message" });
     }
   });
@@ -254,7 +254,7 @@ io.on('connection', async (socket) => {
   socket.on("group_created", async (data) => {
     const { group, memberIds } = data;
 
-    console.log(`📁 Broadcasting group creation to members:`, memberIds);
+    // console.log(`📁 Broadcasting group creation to members:`, memberIds);
 
     // Emit to each member
     if (memberIds && memberIds.length > 0) {
@@ -272,7 +272,7 @@ io.on('connection', async (socket) => {
 
   // Handle disconnect
   socket.on('disconnect', async () => {
-    console.log(`❌ User disconnected: ${userId} (socket: ${socket.id})`);
+    // console.log(`❌ User disconnected: ${userId} (socket: ${socket.id})`);
 
     activeUsers.delete(userId);
     socketToUser.delete(socket.id);
@@ -301,7 +301,7 @@ app.get("/", (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });
 
 export default app;

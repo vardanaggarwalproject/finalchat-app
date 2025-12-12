@@ -11,7 +11,7 @@ export const genToken = (id) => {
 
     return token;
   } catch (error) {
-    console.log(`Error in token generation: ${error.message}`);
+    // console.log(`Error in token generation: ${error.message}`);
     throw error; // Re-throw so caller knows it failed
   }
 };

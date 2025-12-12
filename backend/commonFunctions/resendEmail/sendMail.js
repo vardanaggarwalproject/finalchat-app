@@ -11,10 +11,10 @@ export const emailSend = async (email) => {
       subject: "Hello World",
       html: "<strong>It works!</strong>",
     });
-    console.log(data);
+    // console.log(data);
     return data;
   } catch (error) {
-    console.log(error.message);
+    // console.log(error.message);
     return console.error({ error });
   }
 };

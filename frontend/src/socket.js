@@ -7,11 +7,11 @@ const getToken = () => {
   const token = localStorage.getItem("token");
 
   if (token) {
-    console.log("✅ Token found in localStorage");
+    // console.log("Token found in localStorage");
     return token;
   }
 
-  console.error("❌ No token found in localStorage!");
+  // console.error(" No token found in localStorage!");
   return null;
 };
 
@@ -26,22 +26,22 @@ const socket = io("http://localhost:8000", {
   auth: (cb) => {
     // Dynamically get token when connecting
     const token = getToken();
-    console.log("🔐 Authenticating socket with token:", token ? "✓ Token found" : "✗ No token");
+    // console.log(" Authenticating socket with token:", token ? "✓ Token found" : "✗ No token");
     cb({ token });
   }
 });
 
 // Connection event handlers
 socket.on("connect", () => {
-  console.log("✅ Socket connected successfully:", socket.id);
+  console.log(" Socket connected successfully:", socket.id);
 });
 
 socket.on("disconnect", (reason) => {
-  console.log("❌ Socket disconnected:", reason);
+  console.log(" Socket disconnected:", reason);
 });
 
 socket.on("connect_error", (error) => {
-  console.error("❌ Socket connection error:", error.message);
+  console.error(" Socket connection error:", error.message);
   console.error("Error details:", error);
 });
 

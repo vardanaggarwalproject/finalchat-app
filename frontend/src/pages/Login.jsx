@@ -22,7 +22,7 @@ const Login = () => {
     setError(false);
 
     try {
-      console.log("🔐 Attempting login...");
+      // console.log(" Attempting login...");
       
       const result = await axios.post(
         "http://localhost:8000/api/auth/login",
@@ -30,12 +30,12 @@ const Login = () => {
         { withCredentials: true }
       );
 
-      console.log("✅ Login successful:", result.data);
+      // console.log(" Login successful:", result.data);
 
       // Store user and token in localStorage
       localStorage.setItem("user", JSON.stringify(result.data.user));
       localStorage.setItem("token", result.data.token);
-      console.log("💾 User and token stored in localStorage");
+      // console.log(" User and token stored in localStorage");
 
       setEmail("");
       setPassword("");
@@ -43,14 +43,14 @@ const Login = () => {
 
       // Small delay to ensure localStorage is set before navigation
       setTimeout(() => {
-        console.log("🚀 Navigating to home...");
+        // console.log(" Navigating to home...");
         navigate("/", { replace: true });
         // Force a page reload to ensure App.jsx re-evaluates auth
         window.location.href = "/";
       }, 100);
       
     } catch (error) {
-      console.error("❌ Login error:", error.response?.data);
+      // console.error(" Login error:", error.response?.data);
       setLoading(false);
       setError(error?.response?.data?.message || "Login failed. Please try again.");
     }

@@ -12,7 +12,7 @@ const authenticateUser = async (req, res, next) => {
     // Get token from cookies
     let token = req.cookies.token;
     
-    console.log("Raw token from cookies:", token);
+    // console.log("Raw token from cookies:", token);
     
     if (!token) {
       return res.status(401).json({ error: "Unauthorized - No token provided" });
@@ -36,16 +36,16 @@ const authenticateUser = async (req, res, next) => {
         }
       } catch (e) {
         // If parsing fails, use token as is
-        console.log("Token parsing failed, using as is");
+        // console.log("Token parsing failed, using as is");
       }
     }
 
-    console.log("Processed token:", token);
+    // console.log("Processed token:", token);
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    console.log("Decoded token:", decoded);
+    // console.log("Decoded token:", decoded);
 
     if (!decoded || !decoded.userId) {
       return res.status(401).json({ error: "Unauthorized - Invalid token structure" });
@@ -53,8 +53,8 @@ const authenticateUser = async (req, res, next) => {
 
     // Attach user ID to request
     req.userId = decoded.userId;
-    console.log("Authenticated user ID:", req.userId);
-     console.log("📊 User ID type:", typeof req.userId);
+    // console.log("Authenticated user ID:", req.userId);
+    //  console.log(" User ID type:", typeof req.userId);
 
     // ADDED: Verify user exists in database
     const [user] = await db
@@ -67,7 +67,7 @@ const authenticateUser = async (req, res, next) => {
       return res.status(401).json({ error: "User not found" });
     }
     
-    console.log("✅ User verified in database:", user.id);
+    // console.log(" User verified in database:", user.id);
     
     next();
   } catch (error) {

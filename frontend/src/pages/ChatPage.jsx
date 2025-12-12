@@ -69,7 +69,7 @@ export default function ChatPage() {
 
     // Socket listeners for group messages
     socket.on("receive_group_message", (data) => {
-      console.log("📨 Received group message:", data);
+      // console.log(" Received group message:", data);
       // Add to chat if it's for the current group
       if (data.groupId === roomId) {
         setChat((prev) => [...prev, data]);
@@ -78,20 +78,20 @@ export default function ChatPage() {
 
     // Also listen for direct message event in case it's used
     socket.on("receive_message", (data) => {
-      console.log("📨 Received message:", data);
+      // console.log("Received message:", data);
       setChat((prev) => [...prev, data]);
     });
 
     socket.on("user_joined", (data) => {
-      console.log("👋 User joined:", data.message);
+      console.log(" User joined:", data.message);
     });
 
     socket.on("user_left", (data) => {
-      console.log("👋 User left:", data.message);
+      console.log("User left:", data.message);
     });
 
     socket.on("active_users", (users) => {
-      console.log("👥 Active users:", users);
+      console.log(" Active users:", users);
       setActiveUsers(users);
     });
 
@@ -109,7 +109,7 @@ export default function ChatPage() {
     });
 
     socket.on("message_error", (data) => {
-      console.error("❌ Message error:", data.error);
+      // console.error(" Message error:", data.error);
       alert("Failed to send message: " + data.error);
     });
 
