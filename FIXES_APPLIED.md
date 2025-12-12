@@ -211,7 +211,84 @@ npm run dev
    ```
 7. **Both users should always see each other with matching online status**
 
-### Step 10: Test UI Layout - Independent Scrolling (NEW)
+### Step 10: Test Profile Update Real-Time Sync (NEW - Session 3)
+1. **Setup Two Browser Windows**:
+   - Open main browser window and login as User A
+   - Open incognito/private window and login as User B
+   - Position them side-by-side if possible
+
+2. **Test Profile Update in User A's Window**:
+   - Click three-dot menu next to your name in User A's window
+   - Click "Edit Profile"
+   - Change:
+     - Name: from current name to "User A Updated"
+     - Email: change the email
+     - Image: add a profile image URL
+   - Click "Save"
+   - **Expected**: Profile updated immediately in User A's window
+
+3. **Verify Changes in User B's Window**:
+   - Look at the Users table in User B's window
+   - **Expected**: User A's name should change to "User A Updated" in real-time
+   - User A's avatar should update if image URL was changed
+   - **Key Point**: Changes appear WITHOUT refreshing User B's page!
+
+4. **Test Multiple Tabs Same User**:
+   - Open User A in two different browser tabs
+   - In Tab 1: Edit profile (change name to "Tab Test")
+   - In Tab 2: Check if name updates immediately
+   - **Expected**: Name updates in Tab 2 without refresh
+
+5. **Check Console Logs**:
+   - In User B's browser, check console for:
+     ```
+     👤 Profile updated from server: {userId, user: {...}}
+     🌐 Current user ID: [userId] Updated user ID: [userId]
+     👥 Updating OTHER user profile in users list
+     📝 Updating user in list: [userId] with new data: {...}
+     ```
+
+6. **Persistent Check**:
+   - Refresh User B's page
+   - **Expected**: Updated profile information still shows (persisted in database)
+
+### Step 11: Test Last Message Timestamp Display (NEW - Session 3)
+1. **Send Messages and Check Timestamps**:
+   - User A sends message to User B: "Hello from A"
+   - Check User A's user list: Below User B's name, timestamp should show "Just now"
+   - Check User B's user list: Below User A's name, timestamp should show "Just now"
+
+2. **Wait and Verify Timestamp Updates**:
+   - Wait 2 minutes without refreshing page
+   - **Expected**: Timestamp should show "2m ago" (auto-updated every 30 seconds)
+   - No manual refresh needed
+   - Timestamp updates smoothly every 30 seconds
+
+3. **Check Timestamp Format**:
+   - Recent message (< 1 min): "Just now"
+   - Recent message (1-59 min): "Xm ago"
+   - Recent message (1-23 hours): "Xh ago"
+   - Older message (> 24 hours): Full date format
+   - **All formats should display correctly**
+
+4. **Multiple Messages Timestamp**:
+   - Send 3 messages with 2-minute gaps between them
+   - **Expected**: Only the LAST message timestamp displays in user list
+   - Timestamp updates to reflect when the last message was sent
+
+5. **Refresh Persistence**:
+   - Send a message
+   - Refresh the page
+   - **Expected**: Message timestamp still displays correctly
+   - Data persists from database
+
+6. **Check Console Logs**:
+   - Look for periodic console logs showing timestamp refresh:
+     ```
+     (Every 30 seconds - might not show unless DevTools is open with very verbose logging)
+     ```
+
+### Step 12: Test UI Layout - Independent Scrolling (NEW)
 1. **Test Message Area Scrolling**:
    - Send 20+ messages in quick succession
    - **Expected**: Messages scroll independently in the chat area
@@ -328,12 +405,43 @@ npm run dev
 5. Verify in DevTools Network → WS that WebSocket is connected (should show "101 Switching Protocols")
 6. Check backend console for: `✅ User connected: [userId]` message
 
-### Issue: Timestamp shows wrong time (NEW)
+### Issue: Timestamp shows wrong time (NEW - Session 3)
 **Solution**:
 1. Check browser system clock is correct
 2. Verify server clock is correct (check backend logs for timestamp)
 3. The `formatTimeAgo()` function in `src/utils/timeago.js` calculates time in real-time
 4. If timestamps are off, the issue is likely a system clock mismatch
+
+### Issue: Profile updates not showing in other browser windows (NEW - Session 3)
+**Solution**:
+1. Make sure backend is running: Check terminal for `✅ Profile update broadcasted to all clients` message
+2. Check that socket.io is connected in other window: Should show green dot next to your name
+3. Open DevTools Console and look for:
+   ```
+   👤 Profile updated from server: {userId, user: {...}}
+   ```
+4. If message doesn't appear, the socket broadcast isn't working:
+   - Restart backend server
+   - Refresh all browser windows
+   - Make sure you're logged in as different users in different windows
+5. If still not working, check that `/api/user` route has the IO middleware in `index.js` line 45
+
+### Issue: Last message timestamp not updating (NEW - Session 3)
+**Solution**:
+1. Timestamp updates every 30 seconds automatically
+2. If "2m ago" doesn't change after waiting 2 minutes:
+   - Open DevTools Console
+   - Check if there are any errors
+   - Try refreshing the page
+3. If timestamp shows wrong value:
+   - Check that message was actually sent (check database directly)
+   - Verify `createdAt` field has correct timestamp in database
+   - Check server clock matches client clock (system time)
+4. Timestamp should display in format:
+   - "Just now" = sent in last minute
+   - "Xm ago" = sent X minutes ago
+   - "Xh ago" = sent X hours ago
+   - If format is wrong, check `formatTimeAgo()` function in `src/utils/timeago.js`
 
 ---
 
@@ -347,10 +455,13 @@ When everything is working correctly, you should see:
 4. 🟢 Online status shows correctly for all users (bidirectional - both see each other as online)
 5. 📊 Clean table layout for users and groups
 6. 🔄 Groups appear in real-time for members
-7. ⚙️ Profile edit menu accessible
-8. **NEW**: 📨 Last message displays with actual message text and timestamp (not "no message yet")
-9. **NEW**: ⏰ Timestamp shows "time ago" format (Just now, 1m ago, 2h ago, etc.)
-10. **NEW**: 🔄 Both users see the same last message immediately after sending
+7. ⚙️ Profile edit menu accessible and form pre-populated with current data
+8. 📨 Last message displays with actual message text and timestamp (not "no message yet")
+9. ⏰ Timestamp shows "time ago" format (Just now, 1m ago, 2h ago, etc.) and updates automatically
+10. 🔄 Both users see the same last message immediately after sending
+11. **NEW (Session 3)**: 👤 Profile edits appear in real-time in other browser windows (without refresh!)
+12. **NEW (Session 3)**: 📅 Last message timestamp automatically updates every 30 seconds as time passes
+13. **NEW (Session 3)**: 🔐 Profile changes persist across browser refreshes and multiple tabs
 
 ---
 
@@ -372,6 +483,45 @@ When everything is working correctly, you should see:
   - `min-h-0` on flex children allows proper height distribution
   - `ScrollArea` components handle internal scrolling only
 - **Result**: Clean, professional layout that matches production chat apps
+
+### 11. **Real-Time Profile Updates Across Multiple Browsers** 👤
+- **Problem**: When user edited profile in one browser, changes didn't appear in other browser windows/tabs
+- **Root Cause**: Socket broadcast not reaching all connected clients, missing socket listener cleanup
+- **Solution Implemented**:
+  1. Enhanced `profile_updated` socket listener in Home.jsx (lines 308-340) with detailed logging
+  2. Added immediate profile update in UI when changes are saved (lines 715-727):
+     - Updates `currentUser` state immediately
+     - Updates localStorage with new profile data
+     - Updates users list with new profile information
+     - Updates selected user if currently being viewed
+  3. Added socket listener cleanup (line 355): `socket.off("profile_updated")`
+  4. Enhanced backend profile update route (user.routes.js lines 20-40) with better error handling
+- **Features**:
+  - Edit profile dialog pre-populates with current user data (lines 362-369)
+  - Profile changes save to database via API
+  - Backend broadcasts `profile_updated` event to all connected clients
+  - Frontend listeners update UI in real-time for all users
+  - Changes persist across browser refreshes
+
+### 12. **Last Message Timestamp Updates in Real-Time** ⏰
+- **Problem**: Last message timestamp wasn't showing correctly or updating as time passed
+- **Solution Implemented**:
+  1. Added periodic timestamp refresh (lines 371-380): Re-renders every 30 seconds to update "time ago" format
+  2. Ensured message handlers properly set `createdAt` timestamp (lines 200-220 and 224-244)
+  3. Timestamp displays using `formatTimeAgo()` utility for "Just now", "2m ago", "1h ago" format
+  4. Database persists exact timestamp for accurate calculations
+- **How It Works**:
+  - When message is sent, `createdAt` is set to current time
+  - Frontend displays using relative time format via `formatTimeAgo()`
+  - Every 30 seconds, component re-renders to update relative times
+  - When message is received, timestamp is updated in user list
+  - Timestamp stays current without requiring page refresh
+- **Features**:
+  - Shows "Just now" for messages sent in last minute
+  - Shows "Xm ago" for messages within last hour
+  - Shows "Xh ago" for messages within last 24 hours
+  - Shows full date for older messages
+  - Automatically updates as time passes
 
 ---
 
