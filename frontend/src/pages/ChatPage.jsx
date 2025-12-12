@@ -67,7 +67,16 @@ export default function ChatPage() {
 
     initializeChat();
 
-    // Socket listeners
+    // Socket listeners for group messages
+    socket.on("receive_group_message", (data) => {
+      console.log("📨 Received group message:", data);
+      // Add to chat if it's for the current group
+      if (data.groupId === roomId) {
+        setChat((prev) => [...prev, data]);
+      }
+    });
+
+    // Also listen for direct message event in case it's used
     socket.on("receive_message", (data) => {
       console.log("📨 Received message:", data);
       setChat((prev) => [...prev, data]);
@@ -107,15 +116,18 @@ export default function ChatPage() {
     return () => {
       // Clean up socket listeners
       socket.off("receive_message");
+      socket.off("receive_group_message");
       socket.off("user_joined");
       socket.off("user_left");
       socket.off("active_users");
       socket.off("user_typing");
       socket.off("user_stop_typing");
       socket.off("message_error");
-      
-      // Disconnect socket
-      socket.disconnect();
+
+      // Leave group room
+      if (roomId) {
+        socket.emit("leave_group", { groupId: roomId });
+      }
     };
   }, [roomId, navigate]);
 
@@ -129,15 +141,28 @@ export default function ChatPage() {
 
     const msgData = {
       groupId: roomId,
-      userId: currentUser._id,
+      userId: currentUser._id || currentUser.id,
       username: currentUser.userName || currentUser.email,
       content: message.trim(),
     };
 
-    console.log("📤 Sending message:", msgData);
-    socket.emit("send_message", msgData);
+    console.log("📤 Sending group message:", msgData);
+    // Use send_group_message for group chats
+    socket.emit("send_group_message", msgData);
+
+    // Optimistically add message to UI immediately
+    const tempMessage = {
+      id: Date.now().toString(),
+      senderId: currentUser._id || currentUser.id,
+      groupId: roomId,
+      content: message.trim(),
+      createdAt: new Date().toISOString(),
+      senderName: currentUser.name || currentUser.userName,
+      senderUserName: currentUser.userName || currentUser.email,
+    };
+    setChat((prev) => [...prev, tempMessage]);
     setMessage("");
-    
+
     // Stop typing indicator
     socket.emit("stop_typing", {
       groupId: roomId,
@@ -210,42 +235,53 @@ export default function ChatPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gradient-to-br from-slate-50 to-blue-50">
-          {chat.map((msg, i) => {
-            const isOwnMessage = msg.senderId === currentUser?._id;
-            return (
-              <div
-                key={msg.id || i}
-                className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
-              >
+          {chat && chat.length > 0 ? (
+            chat.map((msg, i) => {
+              // Handle both _id and id field names
+              const msgSenderId = msg.senderId || msg.userId;
+              const currentUserId = currentUser?._id || currentUser?.id;
+              const isOwnMessage = msgSenderId === currentUserId;
+
+              return (
                 <div
-                  className={`max-w-md px-4 py-2 rounded-2xl shadow-sm ${
-                    isOwnMessage
-                      ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white"
-                      : "bg-white border border-slate-200 text-slate-800"
-                  }`}
+                  key={msg.id || i}
+                  className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
                 >
-                  {!isOwnMessage && (
-                    <p className={`text-xs font-semibold mb-1 ${
-                      isOwnMessage ? "text-cyan-100" : "text-slate-600"
-                    }`}>
-                      {msg.senderName || msg.senderUserName}
-                    </p>
-                  )}
-                  <p className="break-words">{msg.content}</p>
-                  <p
-                    className={`text-xs mt-1 ${
-                      isOwnMessage ? "text-cyan-100" : "text-slate-500"
+                  <div
+                    className={`max-w-md px-4 py-2 rounded-2xl shadow-sm ${
+                      isOwnMessage
+                        ? "bg-gradient-to-r from-cyan-400 to-blue-500 text-white"
+                        : "bg-white border border-slate-200 text-slate-800"
                     }`}
                   >
-                    {new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
+                    {!isOwnMessage && (
+                      <p className={`text-xs font-semibold mb-1 ${
+                        isOwnMessage ? "text-cyan-100" : "text-slate-600"
+                      }`}>
+                        {msg.senderName || msg.senderUserName || msg.username || "Unknown"}
+                      </p>
+                    )}
+                    <p className="break-words">{msg.content}</p>
+                    <p
+                      className={`text-xs mt-1 ${
+                        isOwnMessage ? "text-cyan-100" : "text-slate-500"
+                      }`}
+                    >
+                      {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }) : ""}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400">
+              <p className="text-lg">No messages yet</p>
+              <p className="text-sm">Start the conversation!</p>
+            </div>
+          )}
           <div ref={chatEndRef} />
         </div>
 

@@ -79,7 +79,7 @@ const authenticateUser = async (req, res, next) => {
 router.post("/create", authenticateUser, async (req, res) => {
   try {
     const { name, description, memberIds = [] } = req.body;
-    
+
     // Create group
     const [newGroup] = await db.insert(groupsTable).values({
       name,
@@ -104,7 +104,8 @@ router.post("/create", authenticateUser, async (req, res) => {
       await db.insert(groupMembersTable).values(memberValues);
     }
 
-    res.status(201).json({ group: newGroup });
+    // Return group with memberIds for socket event
+    res.status(201).json({ group: newGroup, memberIds });
   } catch (error) {
     console.error("Error creating group:", error);
     res.status(500).json({ error: "Failed to create group", details: error.message });

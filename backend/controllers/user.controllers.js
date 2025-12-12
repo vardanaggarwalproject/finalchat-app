@@ -129,3 +129,48 @@ export const updateUserStatus = async (req, res) => {
     res.status(500).json({ message: "Error updating status" });
   }
 };
+
+export const updateUserProfile = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { name, email, image } = req.body;
+
+    // Build update object with only provided fields
+    const updateData = {};
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (image !== undefined) updateData.image = image;
+    updateData.updatedAt = new Date();
+
+    // Update user
+    await db
+      .update(usersTable)
+      .set(updateData)
+      .where(eq(usersTable.id, userId));
+
+    // Get updated user
+    const [updatedUser] = await db
+      .select({
+        id: usersTable.id,
+        name: usersTable.name,
+        userName: usersTable.userName,
+        email: usersTable.email,
+        image: usersTable.image,
+        isOnline: usersTable.isOnline,
+        lastSeen: usersTable.lastSeen,
+      })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
+
+    console.log("✅ Profile updated for user:", userId);
+    console.log("📡 Updated user data:", updatedUser);
+
+    // Store updated user in response for middleware to broadcast
+    res.locals.updatedUser = updatedUser;
+
+    res.status(200).json({ message: "Profile updated successfully", user: updatedUser });
+  } catch (error) {
+    console.error("Update user profile error:", error);
+    res.status(500).json({ message: "Error updating profile" });
+  }
+};

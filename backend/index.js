@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 
 // Routes
 import authRouter from "./routes/auth.routes.js";
-import userRouter from "./routes/user.routes.js";
+import userRouter, { setIOMiddleware } from "./routes/user.routes.js";
 import groupRouter from "./routes/group.routes.js";
 import messageRouter from "./routes/message.routes.js";
 
@@ -42,7 +42,7 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api/auth", authRouter);
-app.use("/api/user", userRouter);
+app.use("/api/user", setIOMiddleware(io), userRouter);
 app.use("/api/groups", groupRouter);
 app.use("/api/messages", messageRouter);
 
@@ -250,10 +250,30 @@ io.on('connection', async (socket) => {
     socket.to(`group:${groupId}`).emit("user_stop_typing_group", { userId, groupId });
   });
 
+  // Handle group_created event from client
+  socket.on("group_created", async (data) => {
+    const { group, memberIds } = data;
+
+    console.log(`📁 Broadcasting group creation to members:`, memberIds);
+
+    // Emit to each member
+    if (memberIds && memberIds.length > 0) {
+      memberIds.forEach((memberId) => {
+        const memberSocketId = activeUsers.get(memberId);
+        if (memberSocketId && memberSocketId !== socket.id) {
+          io.to(memberSocketId).emit("added_to_group", {
+            ...group,
+            role: "member",
+          });
+        }
+      });
+    }
+  });
+
   // Handle disconnect
   socket.on('disconnect', async () => {
     console.log(`❌ User disconnected: ${userId} (socket: ${socket.id})`);
-    
+
     activeUsers.delete(userId);
     socketToUser.delete(socket.id);
 

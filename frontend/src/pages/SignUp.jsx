@@ -23,25 +23,36 @@ const SignUp = () => {
     setError(false);
 
     try {
+      console.log("📝 Attempting signup...");
+      
       const result = await axios.post(
         "http://localhost:8000/api/auth/signup",
         { userName, email, password },
         { withCredentials: true }
       );
 
-      console.log("Signup successful:", result.data);
+      console.log("✅ Signup successful:", result.data);
+
+      // Store user and token in localStorage
+      localStorage.setItem("user", JSON.stringify(result.data.user));
+      localStorage.setItem("token", result.data.token);
+      console.log("💾 User and token stored in localStorage");
       
       setEmail("");
       setPassword("");
       setUserName("");
       setLoading(false);
       
-      // Navigate directly to home since we get token in signup
-      localStorage.setItem("user", JSON.stringify(result.data.user));
-      navigate("/");
+      // Small delay to ensure localStorage is set before navigation
+      setTimeout(() => {
+        console.log("🚀 Navigating to home...");
+        navigate("/", { replace: true });
+        // Force a page reload to ensure App.jsx re-evaluates auth
+        window.location.href = "/";
+      }, 100);
       
     } catch (error) {
-      console.error("Signup error:", error.response?.data);
+      console.error("❌ Signup error:", error.response?.data);
       setLoading(false);
       setError(error?.response?.data?.message || "Signup failed. Please try again.");
     }
