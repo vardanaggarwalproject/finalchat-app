@@ -76,6 +76,9 @@ const Home = () => {
 
   const messagesEndRef = useRef(null);
   const socketInitialized = useRef(false);
+  const selectedUserRef = useRef(null);
+  const selectedGroupRef = useRef(null);
+  const currentUserRef = useRef(null);
 
   // Initialize user first
   useEffect(() => {
@@ -84,7 +87,7 @@ const Home = () => {
         const userData = localStorage.getItem("user");
 
         if (!userData) {
-          console.error("❌ No user data found, redirecting to login");
+          console.error(" No user data found, redirecting to login");
           navigate("/login");
           return;
         }
@@ -97,7 +100,7 @@ const Home = () => {
         setEditImage(user.image || "");
 
       } catch (error) {
-        console.error("❌ Error initializing user:", error);
+        console.error(" Error initializing user:", error);
         navigate("/login");
       }
     };
@@ -137,9 +140,9 @@ const Home = () => {
             withCredentials: true,
           });
 
-          if (currentUser) {
+          if (currentUserRef.current) {
             const otherUsers = response.data.users.filter(
-              (user) => user.id !== currentUser.id
+              (user) => user.id !== currentUserRef.current.id
             );
             setUsers(otherUsers);
             setFilteredUsers(otherUsers);
@@ -154,7 +157,7 @@ const Home = () => {
     });
 
     socket.on("connect_error", (error) => {
-      console.error(❌ Socket connection error:", error.message);
+      // console.error( Socket connection error:", error.message);
       setSocketConnected(false);
     });
 
@@ -175,6 +178,14 @@ const Home = () => {
         }
         return [...prevUsers, { ...onlineUser, isOnline: true }];
       });
+
+      // Update selectedUser if they came online
+      if (selectedUserRef.current?.id === onlineUser.id) {
+        setSelectedUser((prevSelected) => ({
+          ...prevSelected,
+          isOnline: true
+        }));
+      }
     });
 
     // Listen for user status changes
@@ -185,6 +196,14 @@ const Home = () => {
           u.id === userId ? { ...u, isOnline } : u
         )
       );
+
+      // Update selectedUser if their status changed
+      if (selectedUserRef.current?.id === userId) {
+        setSelectedUser((prevSelected) => ({
+          ...prevSelected,
+          isOnline
+        }));
+      }
     });
 
     // Listen for direct messages
@@ -193,9 +212,9 @@ const Home = () => {
       console.log(" Sender ID:", messageData.senderId, "Content:", messageData.content, "Created At:", messageData.createdAt);
 
       // Add message to chat if it's from the currently selected user
-      if (selectedUser && !selectedGroup &&
-          (messageData.senderId === selectedUser.id ||
-           messageData.receiverId === selectedUser.id)) {
+      if (selectedUserRef.current && !selectedGroupRef.current &&
+          (messageData.senderId === selectedUserRef.current.id ||
+           messageData.receiverId === selectedUserRef.current.id)) {
         console.log(" Adding message to chat");
         setMessages((prevMessages) => [...prevMessages, messageData]);
       }
@@ -228,7 +247,7 @@ const Home = () => {
                 createdAt: messageData.createdAt,
                 senderId: messageData.senderId,
               },
-              unreadCount: selectedUser?.id === messageData.senderId
+              unreadCount: selectedUserRef.current?.id === messageData.senderId
                 ? u.unreadCount
                 : (u.unreadCount || 0) + 1,
             };
@@ -272,7 +291,7 @@ const Home = () => {
       console.log(" Received group message:", messageData);
 
       // Add message to chat if it's in the currently selected group
-      if (selectedGroup && messageData.groupId === selectedGroup.id) {
+      if (selectedGroupRef.current && messageData.groupId === selectedGroupRef.current.id) {
         setMessages((prevMessages) => [...prevMessages, messageData]);
       }
 
@@ -298,7 +317,7 @@ const Home = () => {
     socket.on("group_created", (groupData) => {
       console.log(" New group created:", groupData);
       // Add group to list if current user is a member
-      if (groupData.memberIds && groupData.memberIds.includes(currentUser.id)) {
+      if (groupData.memberIds && groupData.memberIds.includes(currentUserRef.current?.id)) {
         setGroups((prevGroups) => {
           const exists = prevGroups.find(g => g.id === groupData.group.id);
           if (!exists) {
@@ -333,10 +352,10 @@ const Home = () => {
     // Listen for profile updates from server (broadcasts to all connected clients)
     socket.on("profile_updated", (data) => {
       console.log(" Profile updated from server:", data);
-      console.log(" Current user ID:", currentUser?.id, "Updated user ID:", data.userId);
+      console.log(" Current user ID:", currentUserRef.current?.id, "Updated user ID:", data.userId);
 
       // If it's the current user's profile that was updated
-      if (data.userId === currentUser?.id) {
+      if (data.userId === currentUserRef.current?.id) {
         console.log(" Updating CURRENT user profile in state and localStorage:", data.user);
         setCurrentUser(data.user);
         localStorage.setItem("user", JSON.stringify(data.user));
@@ -358,9 +377,9 @@ const Home = () => {
       });
 
       // Update the selected user if it's the one being viewed
-      if (selectedUser?.id === data.userId) {
+      if (selectedUserRef.current?.id === data.userId) {
         console.log(" Updating selected user:", data.userId);
-        setSelectedUser({ ...selectedUser, ...data.user });
+        setSelectedUser((prevSelected) => ({ ...prevSelected, ...data.user }));
       }
     });
 
@@ -381,7 +400,14 @@ const Home = () => {
       socket.disconnect();
       socketInitialized.current = false;
     };
-  }, [currentUser, selectedUser, selectedGroup]);
+  }, [currentUser]);
+
+  // Keep refs updated with current values
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+    selectedGroupRef.current = selectedGroup;
+    currentUserRef.current = currentUser;
+  }, [selectedUser, selectedGroup, currentUser]);
 
   // Populate edit form fields when dialog opens or currentUser changes
   useEffect(() => {
@@ -418,11 +444,41 @@ const Home = () => {
         console.log(" Fetched users:", response.data);
 
         // Filter out current user
-        const otherUsers = response.data.users.filter(
+        let otherUsers = response.data.users.filter(
           (user) => user.id !== currentUser.id
         );
-        setUsers(otherUsers);
-        setFilteredUsers(otherUsers);
+
+        // Fetch last message for each user in parallel
+        const usersWithMessages = await Promise.all(
+          otherUsers.map(async (user) => {
+            try {
+              const messagesResponse = await axios.get(
+                `http://localhost:8000/api/messages/direct/${user.id}`,
+                { withCredentials: true }
+              );
+              const messages = messagesResponse.data.messages || [];
+
+              if (messages.length > 0) {
+                const lastMsg = messages[messages.length - 1];
+                return {
+                  ...user,
+                  lastMessage: {
+                    content: lastMsg.content,
+                    createdAt: lastMsg.createdAt,
+                    senderId: lastMsg.senderId,
+                  },
+                };
+              }
+              return user;
+            } catch (error) {
+              console.error(`Error fetching messages for user ${user.id}:`, error);
+              return user;
+            }
+          })
+        );
+
+        setUsers(usersWithMessages);
+        setFilteredUsers(usersWithMessages);
       } catch (error) {
         console.error("❌ Error fetching users:", error);
       }
@@ -447,8 +503,39 @@ const Home = () => {
         });
 
         console.log(" Fetched groups:", response.data);
-        setGroups(response.data.groups || []);
-        setFilteredGroups(response.data.groups || []);
+        let allGroups = response.data.groups || [];
+
+        // Fetch last message for each group in parallel
+        const groupsWithMessages = await Promise.all(
+          allGroups.map(async (group) => {
+            try {
+              const messagesResponse = await axios.get(
+                `http://localhost:8000/api/groups/${group.id}/messages`,
+                { withCredentials: true }
+              );
+              const messages = messagesResponse.data.messages || [];
+
+              if (messages.length > 0) {
+                const lastMsg = messages[messages.length - 1];
+                return {
+                  ...group,
+                  lastMessage: {
+                    content: lastMsg.content,
+                    createdAt: lastMsg.createdAt,
+                    senderName: lastMsg.senderUserName || lastMsg.senderName,
+                  },
+                };
+              }
+              return group;
+            } catch (error) {
+              console.error(`Error fetching messages for group ${group.id}:`, error);
+              return group;
+            }
+          })
+        );
+
+        setGroups(groupsWithMessages);
+        setFilteredGroups(groupsWithMessages);
         setLoading(false);
       } catch (error) {
         console.error(" Error fetching groups:", error);
@@ -498,7 +585,27 @@ const Home = () => {
           { withCredentials: true }
         );
         console.log(" Fetched messages:", response.data);
-        setMessages(response.data.messages || []);
+        const fetchedMessages = response.data.messages || [];
+        setMessages(fetchedMessages);
+
+        // Update lastMessage in user list from fetched messages
+        if (fetchedMessages.length > 0) {
+          const lastMsg = fetchedMessages[fetchedMessages.length - 1];
+          setUsers((prevUsers) =>
+            prevUsers.map((u) =>
+              u.id === selectedUser.id
+                ? {
+                    ...u,
+                    lastMessage: {
+                      content: lastMsg.content,
+                      createdAt: lastMsg.createdAt,
+                      senderId: lastMsg.senderId,
+                    },
+                  }
+                : u
+            )
+          );
+        }
 
         // Mark messages as read
         try {
@@ -537,7 +644,27 @@ const Home = () => {
           { withCredentials: true }
         );
         // console.log(" Fetched group messages:", response.data);
-        setMessages(response.data.messages || []);
+        const fetchedMessages = response.data.messages || [];
+        setMessages(fetchedMessages);
+
+        // Update lastMessage in group list from fetched messages
+        if (fetchedMessages.length > 0) {
+          const lastMsg = fetchedMessages[fetchedMessages.length - 1];
+          setGroups((prevGroups) =>
+            prevGroups.map((g) =>
+              g.id === selectedGroup.id
+                ? {
+                    ...g,
+                    lastMessage: {
+                      content: lastMsg.content,
+                      createdAt: lastMsg.createdAt,
+                      senderName: lastMsg.senderUserName || lastMsg.senderName,
+                    },
+                  }
+                : g
+            )
+          );
+        }
 
         // Join the group room via socket
         if (socket.connected) {
@@ -553,8 +680,8 @@ const Home = () => {
 
     return () => {
       // Leave group room when deselecting
-      if (selectedGroup && socket.connected) {
-        socket.emit("leave_group", { groupId: selectedGroup.id });
+      if (selectedGroupRef.current && socket.connected) {
+        socket.emit("leave_group", { groupId: selectedGroupRef.current.id });
       }
     };
   }, [selectedGroup, selectedUser]);
@@ -805,6 +932,13 @@ const Home = () => {
       .slice(0, 2);
   };
 
+  // Truncate long messages to fit in the preview (max 50 chars for now)
+  const truncateMessage = (message, maxLength = 50) => {
+    if (!message) return "";
+    if (message.length <= maxLength) return message;
+    return message.substring(0, maxLength) + "...";
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
@@ -960,9 +1094,9 @@ const Home = () => {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           {user.lastMessage ? (
-                            <p className="text-xs text-slate-600 break-words flex-1">
+                            <p className="text-xs text-slate-600 break-words flex-1 line-clamp-1">
                               {user.lastMessage.senderId === currentUser.id ? "You: " : ""}
-                              {user.lastMessage.content}
+                              {truncateMessage(user.lastMessage.content, 50)}
                             </p>
                           ) : (
                             <p className="text-xs text-slate-400 italic">No messages yet</p>
@@ -1052,8 +1186,8 @@ const Home = () => {
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           {group.lastMessage ? (
-                            <p className="text-xs text-slate-600 break-words flex-1">
-                              {group.lastMessage.senderName}: {group.lastMessage.content}
+                            <p className="text-xs text-slate-600 break-words flex-1 line-clamp-1">
+                              {group.lastMessage.senderName}: {truncateMessage(group.lastMessage.content, 40)}
                             </p>
                           ) : (
                             <p className="text-xs text-slate-400 italic">No messages yet</p>
