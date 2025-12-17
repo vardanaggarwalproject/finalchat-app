@@ -21,16 +21,44 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 8000;
 
+// Dynamic CORS configuration
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  : ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"];
+
+console.log("✅ CORS Allowed Origins:", allowedOrigins);
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps, curl requests)
+      if (!origin) return callback(null, true);
+
+      // Check if origin is allowed
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        callback(null, true);
+      } else {
+        // In development, log but don't block
+        console.warn(`⚠️ CORS request from unauthorized origin: ${origin}`);
+        // Allow it anyway for development (remove this check in production)
+        callback(null, true);
+      }
+    },
     credentials: true,
   })
 );
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
+        callback(null, true);
+      } else {
+        console.warn(`⚠️ Socket.io CORS request from: ${origin}`);
+        callback(null, true); // Allow for development
+      }
+    },
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -70,11 +98,19 @@ io.use((socket, next) => {
 
 io.on('connection', async (socket) => {
   const userId = socket.userId;
-  // console.log(`✅ User connected: ${userId} (socket: ${socket.id})`);
+
+  console.log(`\n✅ [CONNECTION] User connected`);
+  console.log(`   User ID: ${userId}`);
+  console.log(`   Socket ID: ${socket.id}`);
+  console.log(`   Total active users before: ${activeUsers.size}`);
 
   // Store active user
   activeUsers.set(userId, socket.id);
   socketToUser.set(socket.id, userId);
+
+  console.log(`   ✅ User registered in activeUsers map`);
+  console.log(`   Total active users after: ${activeUsers.size}`);
+  console.log(`   Active Users: ${Array.from(activeUsers.entries()).map(([uid, sid]) => `${uid}→${sid.substring(0, 8)}...`).join(", ")}`);
 
   // Update user online status in database
   try {
@@ -82,8 +118,10 @@ io.on('connection', async (socket) => {
       .update(usersTable)
       .set({ isOnline: true, lastSeen: new Date() })
       .where(eq(usersTable.id, userId));
+
+    console.log(`   ✅ Database updated: user marked as online`);
   } catch (error) {
-    console.error("Error updating user status:", error);
+    console.error(`   ❌ Error updating user status:`, error.message);
   }
 
   // Broadcast user online status to all connected clients
@@ -92,8 +130,11 @@ io.on('connection', async (socket) => {
     isOnline: true,
   });
 
+  console.log(`   📢 Broadcasted user_status_change to all clients`);
+
   // Join user to their personal room
   socket.join(`user:${userId}`);
+  console.log(`   ✅ User joined room: user:${userId}\n`);
 
   // Get user info and emit to all clients
   try {
@@ -136,18 +177,43 @@ io.on('connection', async (socket) => {
     });
   });
 
-  // Handle direct message
+  // Handle direct message - Enhanced version with logging and error handling
   socket.on("send_direct_message", async (data) => {
     const { receiverId, content } = data;
-    
+
     try {
+      console.log(`\n📤 [DIRECT MESSAGE] Sender: ${userId}, Receiver: ${receiverId}`);
+      console.log(`   Content: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
+
+      // Validate inputs
+      if (!receiverId || !content || !content.trim()) {
+        console.error(`❌ Invalid message data - receiverId: ${receiverId}, content length: ${content?.length || 0}`);
+        socket.emit("message_error", { error: "Invalid message data" });
+        return;
+      }
+
+      // Validate receiver exists
+      const [receiver] = await db
+        .select({ id: usersTable.id })
+        .from(usersTable)
+        .where(eq(usersTable.id, receiverId));
+
+      if (!receiver) {
+        console.error(`❌ Receiver not found: ${receiverId}`);
+        socket.emit("message_error", { error: "Receiver not found" });
+        return;
+      }
+
       // Save message to database
       const [savedMessage] = await db.insert(messagesTable).values({
         senderId: userId,
         receiverId,
-        content,
+        content: content.trim(),
         groupId: null,
+        isRead: false,
       }).returning();
+
+      console.log(`✅ Message saved to DB with ID: ${savedMessage.id}`);
 
       // Get sender info
       const [sender] = await db
@@ -167,33 +233,69 @@ io.on('connection', async (socket) => {
         senderImage: sender.image,
       };
 
-      // Send to receiver if online
+      // Check if receiver is online and send message in real-time
       const receiverSocketId = activeUsers.get(receiverId);
+
+      console.log(`   Checking receiver status...`);
+      console.log(`   Receiver Socket ID: ${receiverSocketId ? `Found (${receiverSocketId})` : "NOT FOUND"}`);
+      console.log(`   Active Users Count: ${activeUsers.size}`);
+
       if (receiverSocketId) {
-        io.to(receiverSocketId).emit("receive_direct_message", messageData);
+        try {
+          console.log(`📨 Emitting real-time message to receiver socket: ${receiverSocketId}`);
+          io.to(receiverSocketId).emit("receive_direct_message", messageData);
+          console.log(`✅ Real-time message emitted successfully`);
+        } catch (emitError) {
+          console.error(`⚠️  Error emitting real-time message:`, emitError.message);
+        }
+      } else {
+        console.warn(`⚠️  Receiver is OFFLINE`);
+        console.warn(`   Message stored in database for delivery when user comes online`);
       }
 
       // Send confirmation back to sender
-      socket.emit("message_sent", messageData);
+      socket.emit("message_sent", {
+        ...messageData,
+        deliveryStatus: receiverSocketId ? "delivered_realtime" : "stored_offline"
+      });
+
+      console.log(`✅ Confirmation sent to sender\n`);
 
     } catch (error) {
-      // console.error("Error sending direct message:", error);
-      socket.emit("message_error", { error: "Failed to send message" });
+      console.error(`❌ Error in send_direct_message:`, error.message);
+      console.error(`   Stack:`, error.stack);
+      socket.emit("message_error", {
+        error: "Failed to send message",
+        details: error.message
+      });
     }
   });
 
-  // Handle group message
+  // Handle group message - Enhanced version with logging
   socket.on("send_group_message", async (data) => {
     const { groupId, content } = data;
-    
+
     try {
+      console.log(`\n📤 [GROUP MESSAGE] Group: ${groupId}, Sender: ${userId}`);
+      console.log(`   Content: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
+
+      // Validate inputs
+      if (!groupId || !content || !content.trim()) {
+        console.error(`❌ Invalid message data - groupId: ${groupId}, content length: ${content?.length || 0}`);
+        socket.emit("message_error", { error: "Invalid message data" });
+        return;
+      }
+
       // Save message to database
       const [savedMessage] = await db.insert(messagesTable).values({
         groupId,
         senderId: userId,
-        content,
+        content: content.trim(),
         receiverId: null,
+        isRead: false,
       }).returning();
+
+      console.log(`✅ Message saved to DB with ID: ${savedMessage.id}`);
 
       // Get sender info
       const [sender] = await db
@@ -214,11 +316,16 @@ io.on('connection', async (socket) => {
       };
 
       // Broadcast to all users in the group
+      console.log(`📢 Broadcasting to all users in group: group:${groupId}`);
       io.to(`group:${groupId}`).emit("receive_group_message", messageData);
+      console.log(`✅ Group message broadcasted successfully\n`);
 
     } catch (error) {
-      // console.error("Error sending group message:", error);
-      socket.emit("message_error", { error: "Failed to send message" });
+      console.error(`❌ Error in send_group_message:`, error.message);
+      socket.emit("message_error", {
+        error: "Failed to send message",
+        details: error.message
+      });
     }
   });
 
@@ -272,10 +379,16 @@ io.on('connection', async (socket) => {
 
   // Handle disconnect
   socket.on('disconnect', async () => {
-    // console.log(`❌ User disconnected: ${userId} (socket: ${socket.id})`);
+    console.log(`\n❌ [DISCONNECT] User disconnected`);
+    console.log(`   User ID: ${userId}`);
+    console.log(`   Socket ID: ${socket.id}`);
+    console.log(`   Active users before: ${activeUsers.size}`);
 
     activeUsers.delete(userId);
     socketToUser.delete(socket.id);
+
+    console.log(`   ✅ User removed from activeUsers map`);
+    console.log(`   Active users after: ${activeUsers.size}`);
 
     // Update user offline status in database
     try {
@@ -283,8 +396,10 @@ io.on('connection', async (socket) => {
         .update(usersTable)
         .set({ isOnline: false, lastSeen: new Date() })
         .where(eq(usersTable.id, userId));
+
+      console.log(`   ✅ Database updated: user marked as offline`);
     } catch (error) {
-      console.error("Error updating user status:", error);
+      console.error(`   ❌ Error updating user status:`, error.message);
     }
 
     // Broadcast user offline status
@@ -292,12 +407,39 @@ io.on('connection', async (socket) => {
       userId,
       isOnline: false,
     });
+
+    console.log(`   📢 Broadcasted user_status_change to all clients\n`);
   });
 });
 
 // Health check
 app.get("/", (req, res) => {
   res.json({ message: "Server is running" });
+});
+
+// Debug endpoint - shows active connections
+app.get("/debug/active-users", (req, res) => {
+  const users = Array.from(activeUsers.entries()).map(([userId, socketId]) => ({
+    userId,
+    socketId: socketId.substring(0, 12) + "..."
+  }));
+  res.json({
+    message: "Active users connected to this backend",
+    activeUsers: users,
+    totalCount: activeUsers.size,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Debug endpoint - socket connection info
+app.get("/debug/socket-info", (req, res) => {
+  res.json({
+    message: "Socket.io server is running",
+    serverPort: PORT,
+    corsOrigins: allowedOrigins,
+    connectedClients: io.engine.clientsCount,
+    activeUsersInMap: activeUsers.size
+  });
 });
 
 server.listen(PORT, () => {
