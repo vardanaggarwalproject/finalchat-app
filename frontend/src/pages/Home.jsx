@@ -211,12 +211,21 @@ const Home = () => {
       console.log(" Received direct message:", messageData);
       console.log(" Sender ID:", messageData.senderId, "Content:", messageData.content, "Created At:", messageData.createdAt);
 
-      // Add message to chat if it's from the currently selected user
-      if (selectedUserRef.current && !selectedGroupRef.current &&
-          (messageData.senderId === selectedUserRef.current.id ||
-           messageData.receiverId === selectedUserRef.current.id)) {
-        console.log(" Adding message to chat");
-        setMessages((prevMessages) => [...prevMessages, messageData]);
+      // Add message to chat if it's between current user and selected user
+      if (selectedUserRef.current && !selectedGroupRef.current && currentUserRef.current) {
+        // Check if message is between current user and the selected user
+        const isMessageForThisChat =
+          (messageData.senderId === selectedUserRef.current.id && messageData.receiverId === currentUserRef.current.id) ||
+          (messageData.senderId === currentUserRef.current.id && messageData.receiverId === selectedUserRef.current.id) ||
+          (messageData.senderId === selectedUserRef.current.id && !messageData.receiverId) || // Old format compatibility
+          (messageData.receiverId === selectedUserRef.current.id && !messageData.groupId); // Old format compatibility
+
+        if (isMessageForThisChat) {
+          console.log(" Adding message to chat - Valid for current conversation");
+          setMessages((prevMessages) => [...prevMessages, messageData]);
+        } else {
+          console.log(" Message not for this chat - Sender:", messageData.senderId, "Receiver:", messageData.receiverId, "Selected user:", selectedUserRef.current.id);
+        }
       }
 
       // Update user list with new last message
@@ -338,10 +347,6 @@ const Home = () => {
         }
         return prevGroups;
       });
-    });
-
-    socket.on("message_sent", (messageData) => {
-      console.log(" Message sent confirmed:", messageData);
     });
 
     socket.on("message_error", (error) => {
