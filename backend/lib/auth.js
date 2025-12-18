@@ -15,7 +15,7 @@ export async function initAuth() {
     baseURL: process.env.BETTER_AUTH_URL,
     basePath: "/api/better-auth",
     secret: process.env.BETTER_AUTH_SECRET,
-     origin: ["http://localhost:5173"],
+     origin: [process.env.ALLOWED_ORIGINS],
     emailAndPassword: {
       enabled: true,
       autoSignIn: false,

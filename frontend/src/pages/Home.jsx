@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axiosInstance from "../utils/axiosConfig";
 import socket from "../socket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -136,9 +136,7 @@ const Home = () => {
       const refreshUserStatus = async () => {
         try {
           console.log(" Refreshing user list after socket connection...");
-          const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/user/all`, {
-            withCredentials: true,
-          });
+          const response = await axiosInstance.get(`/api/user/all`);
 
           if (currentUserRef.current) {
             const otherUsers = response.data.users.filter(
@@ -442,9 +440,7 @@ const Home = () => {
 
       try {
         console.log(" Fetching users...");
-        const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/user/all`, {
-          withCredentials: true,
-        });
+        const response = await axiosInstance.get(`/api/user/all`);
 
         console.log(" Fetched users:", response.data);
 
@@ -457,9 +453,8 @@ const Home = () => {
         const usersWithMessages = await Promise.all(
           otherUsers.map(async (user) => {
             try {
-              const messagesResponse = await axios.get(
-                `http://${import.meta.env.VITE_BACKEND_URL}/api/messages/direct/${user.id}`,
-                { withCredentials: true }
+              const messagesResponse = await axiosInstance.get(
+                `/api/messages/direct/${user.id}`
               );
               const messages = messagesResponse.data.messages || [];
 
@@ -503,9 +498,7 @@ const Home = () => {
 
       try {
         console.log(" Fetching groups...");
-        const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/groups/my-groups`, {
-          withCredentials: true,
-        });
+        const response = await axiosInstance.get(`/api/groups/my-groups`);
 
         console.log(" Fetched groups:", response.data);
         let allGroups = response.data.groups || [];
@@ -514,9 +507,8 @@ const Home = () => {
         const groupsWithMessages = await Promise.all(
           allGroups.map(async (group) => {
             try {
-              const messagesResponse = await axios.get(
-                `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${group.id}/messages`,
-                { withCredentials: true }
+              const messagesResponse = await axiosInstance.get(
+                `/api/groups/${group.id}/messages`
               );
               const messages = messagesResponse.data.messages || [];
 
@@ -585,9 +577,8 @@ const Home = () => {
 
       try {
         console.log(" Fetching messages with:", selectedUser.id);
-        const response = await axios.get(
-          `http://${import.meta.env.VITE_BACKEND_URL}/api/messages/direct/${selectedUser.id}`,
-          { withCredentials: true }
+        const response = await axiosInstance.get(
+          `/api/messages/direct/${selectedUser.id}`
         );
         console.log(" Fetched messages:", response.data);
         const fetchedMessages = response.data.messages || [];
@@ -614,10 +605,9 @@ const Home = () => {
 
         // Mark messages as read
         try {
-          await axios.post(
-            `http://${import.meta.env.VITE_BACKEND_URL}/api/messages/mark-read/${selectedUser.id}`,
-            {},
-            { withCredentials: true }
+          await axiosInstance.post(
+            `/api/messages/mark-read/${selectedUser.id}`,
+            {}
           );
 
           setUsers((prevUsers) =>
@@ -644,9 +634,8 @@ const Home = () => {
 
       try {
         // console.log(" Fetching group messages for:", selectedGroup.id);
-        const response = await axios.get(
-          `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${selectedGroup.id}/messages`,
-          { withCredentials: true }
+        const response = await axiosInstance.get(
+          `/api/groups/${selectedGroup.id}/messages`
         );
         // console.log(" Fetched group messages:", response.data);
         const fetchedMessages = response.data.messages || [];
@@ -804,14 +793,13 @@ const Home = () => {
     setCreatingGroup(true);
 
     try {
-      const response = await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/groups/create`,
+      const response = await axiosInstance.post(
+        `/api/groups/create`,
         {
           name: groupName.trim(),
           description: groupDescription.trim(),
           memberIds: selectedMembers,
-        },
-        { withCredentials: true }
+        }
       );
 
       // console.log(" Group created:", response.data);
@@ -847,15 +835,13 @@ const Home = () => {
 
     try {
       // console.log(" Sending profile update to server...");
-      const response = await axios.put(
-        `${import.meta.env.VITE_BACKEND_URL}/api/user/update`,
-        //   "{VITE_BACKEND_URL}/update"
+      const response = await axiosInstance.put(
+        `/api/user/update`,
         {
           name: editName,
           email: editEmail,
           image: editImage,
-        },
-        { withCredentials: true }
+        }
       );
 
       // console.log(" Profile updated from server:", response.data);
@@ -912,9 +898,7 @@ const Home = () => {
   // Logout
   const handleLogout = async () => {
     try {
-      await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/auth/logout`, {
-        withCredentials: true,
-      });
+      await axiosInstance.get(`/api/auth/logout`);
       localStorage.removeItem("user");
       localStorage.removeItem("token");
       socket.disconnect();

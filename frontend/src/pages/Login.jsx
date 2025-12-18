@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axiosInstance from "../utils/axiosConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,11 +23,10 @@ const Login = () => {
 
     try {
       // console.log(" Attempting login...");
-      
-      const result = await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/auth/login`,
-        { email, password },
-        { withCredentials: true }
+
+      const result = await axiosInstance.post(
+        `/api/auth/login`,
+        { email, password }
       );
 
       // console.log(" Login successful:", result.data);

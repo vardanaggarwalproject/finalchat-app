@@ -43,7 +43,7 @@ START: Your Local Code
 │ 1. Go back to Render dashboard                          │
 │ 2. Click chatly-backend service                         │
 │ 3. Click "Environment"                                  │
-│ 4. Edit ALLOWED_ORIGINS                                 │
+│ 4. Edit ALLOWED_ORIGINS                                 │ 
 │ 5. Set to: https://chatly-XXXXX.vercel.app             │
 │ 6. Click "Save"                                         │
 │ Wait 1 minute for restart ✅                            │

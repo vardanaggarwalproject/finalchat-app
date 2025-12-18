@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 8000;
 // Dynamic CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
-  : ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"];
+  : ["http://localhost:5173", "http://localhost:3000", "https://chat-application-gqrk4hwr2-vardans-projects-378735dd.vercel.app"];
 
 console.log("✅ CORS Allowed Origins:", allowedOrigins);
 

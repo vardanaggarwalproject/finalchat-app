@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
+import axiosInstance from "../utils/axiosConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,11 +24,10 @@ const SignUp = () => {
 
     try {
       // console.log(" Attempting signup...");
-      
-      const result = await axios.post(
-        `${import.meta.env.VITE_BACKEND_URL}/api/auth/signup`,
-        { userName, email, password },
-        { withCredentials: true }
+
+      const result = await axiosInstance.post(
+        `/api/auth/signup`,
+        { userName, email, password }
       );
 
       // console.log(" Signup successful:", result.data);
