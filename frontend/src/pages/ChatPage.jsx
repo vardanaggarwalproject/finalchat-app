@@ -37,7 +37,7 @@ export default function ChatPage() {
 
         // Fetch group info
         const groupResponse = await axios.get(
-          `http://localhost:8000/api/groups/${roomId}`,
+          `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${roomId}`,
           { withCredentials: true }
         );
         setGroupInfo(groupResponse.data.group);
@@ -45,7 +45,7 @@ export default function ChatPage() {
 
         // Fetch message history
         const messagesResponse = await axios.get(
-          `http://localhost:8000/api/groups/${roomId}/messages`,
+          `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${roomId}/messages`,
           { withCredentials: true }
         );
         setChat(messagesResponse.data.messages);

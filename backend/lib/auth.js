@@ -24,7 +24,7 @@ export async function initAuth() {
       github: {
         clientId: process.env.GITHUB_CLIENT_ID,
         clientSecret: process.env.GITHUB_CLIENT_SECRET,
-        redirectURI: `http://localhost:8000/api/better-auth/callback/github`,
+        redirectURI: `http://${import.meta.env.VITE_BACKEND_URL}/api/better-auth/callback/github`,
       },
     },
     database: mongodbAdapter(db, { client }),

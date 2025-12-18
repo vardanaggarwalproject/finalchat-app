@@ -18,7 +18,7 @@ const GroupList = () => {
 
   const fetchGroups = async () => {
     try {
-      const response = await axios.get("http://localhost:8000/api/groups/my-groups", {
+      const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/groups/my-groups`, {
         withCredentials: true,
       });
       setGroups(response.data.groups);
@@ -34,7 +34,7 @@ const GroupList = () => {
     
     try {
       const response = await axios.post(
-        "http://localhost:8000/api/groups/create",
+        `${import.meta.env.VITE_BACKEND_URL}/api/groups/create`,
         {
           name: newGroupName,
           description: newGroupDescription,

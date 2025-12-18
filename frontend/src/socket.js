@@ -34,7 +34,7 @@ const getBackendUrl = () => {
 
   if (hostname === 'localhost' || hostname === '127.0.0.1') {
     // Local development - use localhost backend
-    backendUrl = `${protocol}//localhost:8000`;
+    backendUrl = `${protocol}//${import.meta.env.VITE_BACKEND_URL}`;
     console.log("✅ [SOCKET] Auto-detected: Running locally (localhost)");
   } else {
     // Remote/cross-system - use same host with backend port

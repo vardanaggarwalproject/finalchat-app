@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { createAuthClient } from "better-auth/client";
 
 const authClient = createAuthClient({
-  baseURL: "http://localhost:8000",
+  baseURL: import.meta.env.VITE_BACKEND_URL,
   basePath: "/api/better-auth",
 });
 

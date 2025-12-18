@@ -26,7 +26,7 @@ const SignUp = () => {
       // console.log(" Attempting signup...");
       
       const result = await axios.post(
-        "http://localhost:8000/api/auth/signup",
+        `${import.meta.env.VITE_BACKEND_URL}/api/auth/signup`,
         { userName, email, password },
         { withCredentials: true }
       );

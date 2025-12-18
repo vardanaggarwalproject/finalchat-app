@@ -136,7 +136,7 @@ const Home = () => {
       const refreshUserStatus = async () => {
         try {
           console.log(" Refreshing user list after socket connection...");
-          const response = await axios.get("http://localhost:8000/api/user/all", {
+          const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/user/all`, {
             withCredentials: true,
           });
 
@@ -442,7 +442,7 @@ const Home = () => {
 
       try {
         console.log(" Fetching users...");
-        const response = await axios.get("http://localhost:8000/api/user/all", {
+        const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/user/all`, {
           withCredentials: true,
         });
 
@@ -458,7 +458,7 @@ const Home = () => {
           otherUsers.map(async (user) => {
             try {
               const messagesResponse = await axios.get(
-                `http://localhost:8000/api/messages/direct/${user.id}`,
+                `http://${import.meta.env.VITE_BACKEND_URL}/api/messages/direct/${user.id}`,
                 { withCredentials: true }
               );
               const messages = messagesResponse.data.messages || [];
@@ -503,7 +503,7 @@ const Home = () => {
 
       try {
         console.log(" Fetching groups...");
-        const response = await axios.get("http://localhost:8000/api/groups/my-groups", {
+        const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/groups/my-groups`, {
           withCredentials: true,
         });
 
@@ -515,7 +515,7 @@ const Home = () => {
           allGroups.map(async (group) => {
             try {
               const messagesResponse = await axios.get(
-                `http://localhost:8000/api/groups/${group.id}/messages`,
+                `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${group.id}/messages`,
                 { withCredentials: true }
               );
               const messages = messagesResponse.data.messages || [];
@@ -586,7 +586,7 @@ const Home = () => {
       try {
         console.log(" Fetching messages with:", selectedUser.id);
         const response = await axios.get(
-          `http://localhost:8000/api/messages/direct/${selectedUser.id}`,
+          `http://${import.meta.env.VITE_BACKEND_URL}/api/messages/direct/${selectedUser.id}`,
           { withCredentials: true }
         );
         console.log(" Fetched messages:", response.data);
@@ -615,7 +615,7 @@ const Home = () => {
         // Mark messages as read
         try {
           await axios.post(
-            `http://localhost:8000/api/messages/mark-read/${selectedUser.id}`,
+            `http://${import.meta.env.VITE_BACKEND_URL}/api/messages/mark-read/${selectedUser.id}`,
             {},
             { withCredentials: true }
           );
@@ -645,7 +645,7 @@ const Home = () => {
       try {
         // console.log(" Fetching group messages for:", selectedGroup.id);
         const response = await axios.get(
-          `http://localhost:8000/api/groups/${selectedGroup.id}/messages`,
+          `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${selectedGroup.id}/messages`,
           { withCredentials: true }
         );
         // console.log(" Fetched group messages:", response.data);
@@ -805,7 +805,7 @@ const Home = () => {
 
     try {
       const response = await axios.post(
-        "http://localhost:8000/api/groups/create",
+        `${import.meta.env.VITE_BACKEND_URL}/api/groups/create`,
         {
           name: groupName.trim(),
           description: groupDescription.trim(),
@@ -848,7 +848,8 @@ const Home = () => {
     try {
       // console.log(" Sending profile update to server...");
       const response = await axios.put(
-        "http://localhost:8000/api/user/update",
+        `${import.meta.env.VITE_BACKEND_URL}/api/user/update`,
+        //   "{VITE_BACKEND_URL}/update"
         {
           name: editName,
           email: editEmail,
@@ -911,7 +912,7 @@ const Home = () => {
   // Logout
   const handleLogout = async () => {
     try {
-      await axios.get("http://localhost:8000/api/auth/logout", {
+      await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/auth/logout`, {
         withCredentials: true,
       });
       localStorage.removeItem("user");
