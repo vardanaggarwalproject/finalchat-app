@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable no-console */
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -186,9 +188,13 @@ const HomePage = () => {
                   className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity group"
                 >
                   <Logo
-                    className={`transition-all ${isScrolled ? "w-9 h-9" : "w-12 h-12"}`}
+                    className={`transition-all ${
+                      isScrolled ? "w-9 h-9" : "w-12 h-12"
+                    }`}
                     showText={true}
-                    textClassName={`text-[#040316] transition-all ${isScrolled ? "text-lg" : "text-2xl"}`}
+                    textClassName={`text-[#040316] transition-all ${
+                      isScrolled ? "text-lg" : "text-2xl"
+                    }`}
                   />
                 </button>
               </motion.div>
@@ -311,7 +317,9 @@ const HomePage = () => {
                               className="cursor-pointer hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 rounded-lg transition-all py-2.5 px-3"
                             >
                               <LogOut className="w-4 h-4 mr-3 text-red-500" />
-                              <span className="font-medium text-slate-700">Log out</span>
+                              <span className="font-medium text-slate-700">
+                                Log out
+                              </span>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // components/GroupList.jsx
 
 import React, { useEffect, useState } from "react";
@@ -18,9 +19,12 @@ const GroupList = () => {
 
   const fetchGroups = async () => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_BACKEND_URL}/api/groups/my-groups`, {
-        withCredentials: true,
-      });
+      const response = await axios.get(
+        `${import.meta.env.VITE_BACKEND_URL}/api/groups/my-groups`,
+        {
+          withCredentials: true,
+        }
+      );
       setGroups(response.data.groups);
     } catch (error) {
       console.error("Error fetching groups:", error);
@@ -31,7 +35,7 @@ const GroupList = () => {
 
   const createGroup = async (e) => {
     e.preventDefault();
-    
+
     try {
       const response = await axios.post(
         `${import.meta.env.VITE_BACKEND_URL}/api/groups/create`,
@@ -46,7 +50,7 @@ const GroupList = () => {
       setShowCreateModal(false);
       setNewGroupName("");
       setNewGroupDescription("");
-      
+
       // Navigate to the new group
       navigate(`/chat/${response.data.group.id}`);
     } catch (error) {

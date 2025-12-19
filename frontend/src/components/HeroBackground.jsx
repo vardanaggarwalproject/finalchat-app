@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+/* eslint-disable react-hooks/unsupported-syntax */
+import { useEffect, useRef } from "react";
 
 const HeroBackground = () => {
   const canvasRef = useRef(null);
@@ -7,7 +8,7 @@ const HeroBackground = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     let animationFrameId;
 
     // Set canvas size
@@ -16,7 +17,7 @@ const HeroBackground = () => {
       canvas.height = window.innerHeight;
     };
     setCanvasSize();
-    window.addEventListener('resize', setCanvasSize);
+    window.addEventListener("resize", setCanvasSize);
 
     // Particle class
     class Particle {
@@ -81,14 +82,21 @@ const HeroBackground = () => {
         ctx.moveTo(0, canvas.height);
 
         for (let x = 0; x <= canvas.width; x += 5) {
-          const y = this.y + Math.sin((x * this.frequency) + this.offset) * this.amplitude;
+          const y =
+            this.y +
+            Math.sin(x * this.frequency + this.offset) * this.amplitude;
           ctx.lineTo(x, y);
         }
 
         ctx.lineTo(canvas.width, canvas.height);
         ctx.closePath();
 
-        const gradient = ctx.createLinearGradient(0, this.y - 100, 0, canvas.height);
+        const gradient = ctx.createLinearGradient(
+          0,
+          this.y - 100,
+          0,
+          canvas.height
+        );
         gradient.addColorStop(0, this.color.start);
         gradient.addColorStop(1, this.color.end);
 
@@ -106,39 +114,27 @@ const HeroBackground = () => {
 
     // Create fog waves
     const fogWaves = [
-      new FogWave(
-        canvas.height * 0.6,
-        30,
-        0.003,
-        0.01,
-        { start: 'rgba(238, 199, 244, 0.15)', end: 'rgba(238, 199, 244, 0)' }
-      ),
-      new FogWave(
-        canvas.height * 0.65,
-        25,
-        0.004,
-        0.015,
-        { start: 'rgba(171, 212, 255, 0.12)', end: 'rgba(171, 212, 255, 0)' }
-      ),
-      new FogWave(
-        canvas.height * 0.7,
-        35,
-        0.002,
-        0.008,
-        { start: 'rgba(196, 181, 253, 0.18)', end: 'rgba(196, 181, 253, 0)' }
-      ),
-      new FogWave(
-        canvas.height * 0.75,
-        20,
-        0.005,
-        0.012,
-        { start: 'rgba(146, 144, 195, 0.1)', end: 'rgba(146, 144, 195, 0)' }
-      ),
+      new FogWave(canvas.height * 0.6, 30, 0.003, 0.01, {
+        start: "rgba(238, 199, 244, 0.15)",
+        end: "rgba(238, 199, 244, 0)",
+      }),
+      new FogWave(canvas.height * 0.65, 25, 0.004, 0.015, {
+        start: "rgba(171, 212, 255, 0.12)",
+        end: "rgba(171, 212, 255, 0)",
+      }),
+      new FogWave(canvas.height * 0.7, 35, 0.002, 0.008, {
+        start: "rgba(196, 181, 253, 0.18)",
+        end: "rgba(196, 181, 253, 0)",
+      }),
+      new FogWave(canvas.height * 0.75, 20, 0.005, 0.012, {
+        start: "rgba(146, 144, 195, 0.1)",
+        end: "rgba(146, 144, 195, 0)",
+      }),
     ];
 
     // Draw grid
     const drawGrid = (offset) => {
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.08)";
       ctx.lineWidth = 1;
 
       const gridSize = 60;
@@ -196,7 +192,7 @@ const HeroBackground = () => {
       gridOffset += 0.3;
 
       // Draw fog waves
-      fogWaves.forEach(wave => {
+      fogWaves.forEach((wave) => {
         wave.update();
         wave.draw();
       });
@@ -205,7 +201,7 @@ const HeroBackground = () => {
       drawConnections();
 
       // Update and draw particles
-      particles.forEach(particle => {
+      particles.forEach((particle) => {
         particle.update();
         particle.draw();
       });
@@ -217,7 +213,7 @@ const HeroBackground = () => {
 
     // Cleanup
     return () => {
-      window.removeEventListener('resize', setCanvasSize);
+      window.removeEventListener("resize", setCanvasSize);
       cancelAnimationFrame(animationFrameId);
     };
   }, []);

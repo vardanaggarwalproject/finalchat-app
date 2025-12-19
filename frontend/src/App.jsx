@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import React from "react";
 import { Route, Routes, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
@@ -81,8 +82,8 @@ const App = () => {
         toastOptions={{
           duration: 3000,
           style: {
-            background: 'white',
-            border: '1px solid #e2e8f0',
+            background: "white",
+            border: "1px solid #e2e8f0",
             zIndex: 9999,
           },
         }}
