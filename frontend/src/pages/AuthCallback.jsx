@@ -10,13 +10,13 @@ const authClient = createAuthClient({
 const AuthCallback = () => {
   const navigate = useNavigate();
   const [error, setError] = useState(null);
-
+  console.log("AuthCallback rendered");
   useEffect(() => {
     const handleCallback = async () => {
       try {
         // Get the session after GitHub OAuth callback
         const session = await authClient.getSession();
-        
+
         if (session) {
           console.log("Session established:", session);
           // Store user data
