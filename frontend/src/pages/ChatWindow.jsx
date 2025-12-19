@@ -307,36 +307,70 @@ const ChatWindow = () => {
     // Listen for message sent confirmation (for sender's UI update)
     socket.on("message_sent", (messageData) => {
       console.log(" Message sent confirmation:", messageData);
-      console.log(
-        " Receiver ID:",
-        messageData.receiverId,
-        "Content:",
-        messageData.content
-      );
 
-      // Update user list to show the message in the receiver's entry
-      setUsers((prevUsers) => {
-        console.log(
-          " Updating sender's user list, total users:",
-          prevUsers.length
-        );
-        const updated = prevUsers.map((u) => {
-          if (u.id === messageData.receiverId) {
-            console.log(" Found receiver in users list, updating lastMessage");
-            return {
-              ...u,
-              lastMessage: {
-                content: messageData.content,
-                createdAt: messageData.createdAt,
-                senderId: messageData.senderId,
-              },
-            };
-          }
-          return u;
+      if (messageData.receiverId) {
+        // Direct message - update user list to show last message
+        console.log(" Receiver ID:", messageData.receiverId, "Content:", messageData.content);
+
+        setUsers((prevUsers) => {
+          console.log(" Updating sender's user list, total users:", prevUsers.length);
+          const updated = prevUsers.map((u) => {
+            if (u.id === messageData.receiverId) {
+              console.log(" Found receiver in users list, updating lastMessage");
+              return {
+                ...u,
+                lastMessage: {
+                  content: messageData.content,
+                  createdAt: messageData.createdAt,
+                  senderId: messageData.senderId,
+                },
+              };
+            }
+            return u;
+          });
+          console.log(" Updated users list after message_sent:", updated);
+          return updated;
         });
-        console.log(" Updated users list after message_sent:", updated);
-        return updated;
-      });
+      } else if (messageData.groupId) {
+        // Group message - replace optimistic message with confirmed message
+        console.log(" Group message confirmed. Replacing optimistic message with confirmed data");
+
+        setMessages((prevMessages) => {
+          // Replace optimistic message (with temp ID like Date.now().toString()) with confirmed message
+          // by checking if the message content and timestamp match
+          return prevMessages.map((msg) => {
+            // Match optimistic message: same groupId, same senderId, same content
+            if (
+              msg.groupId === messageData.groupId &&
+              msg.senderId === messageData.senderId &&
+              msg.content === messageData.content &&
+              msg.id === msg.id.toString() && // temp ID from Date.now()
+              msg.id !== messageData.id // not already replaced
+            ) {
+              console.log(" Replacing optimistic message ID:", msg.id, "with server ID:", messageData.id);
+              return messageData;
+            }
+            return msg;
+          });
+        });
+
+        // Update group last message
+        setGroups((prevGroups) =>
+          prevGroups.map((g) => {
+            if (g.id === messageData.groupId) {
+              return {
+                ...g,
+                lastMessage: {
+                  content: messageData.content,
+                  createdAt: messageData.createdAt,
+                  senderName: messageData.senderUserName || messageData.senderName,
+                },
+              };
+            }
+            return g;
+          })
+        );
+      }
     });
 
     // Listen for group messages

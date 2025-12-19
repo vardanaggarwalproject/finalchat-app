@@ -315,9 +315,14 @@ io.on('connection', async (socket) => {
         senderImage: sender.image,
       };
 
-      // Broadcast to all users in the group
-      console.log(`📢 Broadcasting to all users in group: group:${groupId}`);
-      io.to(`group:${groupId}`).emit("receive_group_message", messageData);
+      // Broadcast to all OTHER users in the group (excluding sender)
+      // Sender already has the message from optimistic UI update
+      console.log(`📢 Broadcasting to other users in group: group:${groupId}`);
+      socket.broadcast.to(`group:${groupId}`).emit("receive_group_message", messageData);
+
+      // Confirm to sender that message was sent and saved with full message data
+      // This allows the frontend to replace the optimistic message with the confirmed message
+      socket.emit("message_sent", messageData);
       console.log(`✅ Group message broadcasted successfully\n`);
 
     } catch (error) {
