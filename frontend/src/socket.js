@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // src/socket.js
 import { io } from "socket.io-client";
 
@@ -32,7 +33,7 @@ const getBackendUrl = () => {
   // Build backend URL using same protocol and hostname as frontend
   let backendUrl;
 
-  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
     // Local development - use localhost backend
     backendUrl = `${protocol}//${import.meta.env.VITE_BACKEND_URL}`;
     console.log("✅ [SOCKET] Auto-detected: Running locally (localhost)");
@@ -42,7 +43,13 @@ const getBackendUrl = () => {
     console.log("✅ [SOCKET] Auto-detected: Cross-system connection");
   }
 
-  console.log("   Frontend accessed from: " + protocol + "//" + hostname + (port ? ":" + port : ""));
+  console.log(
+    "   Frontend accessed from: " +
+      protocol +
+      "//" +
+      hostname +
+      (port ? ":" + port : "")
+  );
   console.log("   Backend will connect to:", backendUrl);
   console.log("   💡 Both users MUST access frontend from same URL!");
 
@@ -53,7 +60,7 @@ const getBackendUrl = () => {
 const socket = io(getBackendUrl(), {
   withCredentials: true,
   autoConnect: false,
-  transports: ['websocket', 'polling'],
+  transports: ["websocket", "polling"],
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionAttempts: 5,
@@ -62,7 +69,7 @@ const socket = io(getBackendUrl(), {
     const token = getToken();
     // console.log(" Authenticating socket with token:", token ? "✓ Token found" : "✗ No token");
     cb({ token });
-  }
+  },
 });
 
 // Log the backend URL for debugging
@@ -76,7 +83,11 @@ window.setSocketBackendUrl = (url) => {
   console.log(`📝 Setting backend URL to: ${url}`);
   sessionStorage.setItem("backendUrl", url);
   console.log("⚠️  Please refresh the page (F5) to apply changes");
-  alert("Backend URL updated to: " + url + "\n\nPlease refresh the page (F5) to apply changes");
+  alert(
+    "Backend URL updated to: " +
+      url +
+      "\n\nPlease refresh the page (F5) to apply changes"
+  );
 };
 
 // Export function to check current connection

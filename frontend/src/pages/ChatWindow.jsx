@@ -1,4 +1,6 @@
 /* eslint-disable no-unused-vars */
+/* eslint-disable no-console */
+
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../utils/axiosConfig";

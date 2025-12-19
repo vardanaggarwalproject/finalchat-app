@@ -1,4 +1,5 @@
-import axios from 'axios';
+/* eslint-disable no-console */
+import axios from "axios";
 
 // Create axios instance with default config
 const axiosInstance = axios.create({
@@ -14,10 +15,10 @@ axiosInstance.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 || error.response?.status === 400) {
       // Token is invalid or not found, clear storage and redirect
-      console.error('Unauthorized:', error.response?.data?.message);
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
+      console.error("Unauthorized:", error.response?.data?.message);
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }
