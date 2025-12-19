@@ -2,26 +2,26 @@ import React from "react";
 import { Route, Routes, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import SignUp from "./pages/SignUp.jsx";
-import Home from "./pages/Home.jsx";
+import { HomePage, ChatWindow } from "./pages/index.js";
+import { Toaster } from "sonner";
 
 // Helper function to get token from cookies
-const getTokenFromCookie = () => {
-  const cookies = document.cookie.split(";");
-  for (let cookie of cookies) {
-    const [name, value] = cookie.trim().split("=");
-    if (name === "token") {
-      return value;
-    }
-  }
-  return null;
-};
+// const getTokenFromCookie = () => {
+//   const cookies = document.cookie.split(";");
+//   for (let cookie of cookies) {
+//     const [name, value] = cookie.trim().split("=");
+//     if (name === "token") {
+//       return value;
+//     }
+//   }
+//   return null;
+// };
 
 // Helper function to check if user is authenticated
 const isAuthenticated = () => {
   try {
     // const token = getTokenFromCookie();
     const user = localStorage.getItem("user");
-    console.log("jello");
     // For authentication, we primarily rely on localStorage user data
     // The cookie will be sent automatically with requests
     const isAuth = !!user;
@@ -62,8 +62,8 @@ const AuthRoute = ({ children }) => {
   console.log(" Auth route check:", isAuth);
 
   if (isAuth) {
-    console.log("Already authenticated, redirecting to home");
-    return <Navigate to="/" replace />;
+    console.log("Already authenticated, redirecting to chat");
+    return <Navigate to="/chat" replace />;
   }
 
   console.log("Not authenticated, rendering auth page");
@@ -72,34 +72,56 @@ const AuthRoute = ({ children }) => {
 
 const App = () => {
   return (
-    <Routes>
-      <Route
-        path="/login"
-        element={
-          <AuthRoute>
-            <Login />
-          </AuthRoute>
-        }
+    <>
+      <Toaster
+        position="bottom-right"
+        richColors
+        expand={true}
+        closeButton
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: 'white',
+            border: '1px solid #e2e8f0',
+            zIndex: 9999,
+          },
+        }}
       />
-      <Route
-        path="/signup"
-        element={
-          <AuthRoute>
-            <SignUp />
-          </AuthRoute>
-        }
-      />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Home />
-          </ProtectedRoute>
-        }
-      />
-      {/* Redirect any unknown routes to home */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route
+          path="/login"
+          element={
+            <AuthRoute>
+              <Login />
+            </AuthRoute>
+          }
+        />
+        <Route
+          path="/signup"
+          element={
+            <AuthRoute>
+              <SignUp />
+            </AuthRoute>
+          }
+        />
+        <Route
+          path="/chat"
+          element={
+            <ProtectedRoute>
+              <ChatWindow />
+            </ProtectedRoute>
+          }
+        />
+        {/* Redirect any unknown routes to home */}
+        <Route
+          path="*"
+          element={
+            <Navigate to="/" element={<h1>"welcome toootototototo"</h1>} />
+          }
+        />
+      </Routes>
+    </>
   );
 };
 

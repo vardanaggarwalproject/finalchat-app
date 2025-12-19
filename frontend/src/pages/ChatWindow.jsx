@@ -1,7 +1,10 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../utils/axiosConfig";
 import socket from "../socket";
+import Logo from "@/components/Logo";
+import SplashScreen from "@/components/SplashScreen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,7 +27,7 @@ import {
   Phone,
   Video,
   Paperclip,
-  Smile
+  Smile,
 } from "lucide-react";
 import {
   Dialog,
@@ -39,13 +42,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTimeAgo } from "@/utils/timeago";
 
-const Home = () => {
+const ChatWindow = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
   const [users, setUsers] = useState([]);
@@ -98,7 +102,6 @@ const Home = () => {
         setEditName(user.name || user.userName || "");
         setEditEmail(user.email || "");
         setEditImage(user.image || "");
-
       } catch (error) {
         console.error(" Error initializing user:", error);
         navigate("/login");
@@ -168,9 +171,9 @@ const Home = () => {
     socket.on("user_online", (onlineUser) => {
       console.log(" User came online:", onlineUser);
       setUsers((prevUsers) => {
-        const exists = prevUsers.find(u => u.id === onlineUser.id);
+        const exists = prevUsers.find((u) => u.id === onlineUser.id);
         if (exists) {
-          return prevUsers.map(u =>
+          return prevUsers.map((u) =>
             u.id === onlineUser.id ? { ...u, isOnline: true } : u
           );
         }
@@ -181,25 +184,25 @@ const Home = () => {
       if (selectedUserRef.current?.id === onlineUser.id) {
         setSelectedUser((prevSelected) => ({
           ...prevSelected,
-          isOnline: true
+          isOnline: true,
         }));
       }
     });
 
     // Listen for user status changes
     socket.on("user_status_change", ({ userId, isOnline }) => {
-      console.log(` User status changed: ${userId} - ${isOnline ? 'online' : 'offline'}`);
+      console.log(
+        ` User status changed: ${userId} - ${isOnline ? "online" : "offline"}`
+      );
       setUsers((prevUsers) =>
-        prevUsers.map((u) =>
-          u.id === userId ? { ...u, isOnline } : u
-        )
+        prevUsers.map((u) => (u.id === userId ? { ...u, isOnline } : u))
       );
 
       // Update selectedUser if their status changed
       if (selectedUserRef.current?.id === userId) {
         setSelectedUser((prevSelected) => ({
           ...prevSelected,
-          isOnline
+          isOnline,
         }));
       }
     });
@@ -207,37 +210,69 @@ const Home = () => {
     // Listen for direct messages
     socket.on("receive_direct_message", (messageData) => {
       console.log(" Received direct message:", messageData);
-      console.log(" Sender ID:", messageData.senderId, "Content:", messageData.content, "Created At:", messageData.createdAt);
+      console.log(
+        " Sender ID:",
+        messageData.senderId,
+        "Content:",
+        messageData.content,
+        "Created At:",
+        messageData.createdAt
+      );
 
       // Add message to chat if it's between current user and selected user
-      if (selectedUserRef.current && !selectedGroupRef.current && currentUserRef.current) {
+      if (
+        selectedUserRef.current &&
+        !selectedGroupRef.current &&
+        currentUserRef.current
+      ) {
         // Check if message is between current user and the selected user
         const isMessageForThisChat =
-          (messageData.senderId === selectedUserRef.current.id && messageData.receiverId === currentUserRef.current.id) ||
-          (messageData.senderId === currentUserRef.current.id && messageData.receiverId === selectedUserRef.current.id) ||
-          (messageData.senderId === selectedUserRef.current.id && !messageData.receiverId) || // Old format compatibility
-          (messageData.receiverId === selectedUserRef.current.id && !messageData.groupId); // Old format compatibility
+          (messageData.senderId === selectedUserRef.current.id &&
+            messageData.receiverId === currentUserRef.current.id) ||
+          (messageData.senderId === currentUserRef.current.id &&
+            messageData.receiverId === selectedUserRef.current.id) ||
+          (messageData.senderId === selectedUserRef.current.id &&
+            !messageData.receiverId) || // Old format compatibility
+          (messageData.receiverId === selectedUserRef.current.id &&
+            !messageData.groupId); // Old format compatibility
 
         if (isMessageForThisChat) {
-          console.log(" Adding message to chat - Valid for current conversation");
+          console.log(
+            " Adding message to chat - Valid for current conversation"
+          );
           setMessages((prevMessages) => [...prevMessages, messageData]);
         } else {
-          console.log(" Message not for this chat - Sender:", messageData.senderId, "Receiver:", messageData.receiverId, "Selected user:", selectedUserRef.current.id);
+          console.log(
+            " Message not for this chat - Sender:",
+            messageData.senderId,
+            "Receiver:",
+            messageData.receiverId,
+            "Selected user:",
+            selectedUserRef.current.id
+          );
         }
       }
 
       // Update user list with new last message
       // This updates the sender's last message in the receiver's list
-      console.log(" Updating user list with last message from sender:", messageData.senderId);
+      console.log(
+        " Updating user list with last message from sender:",
+        messageData.senderId
+      );
       setUsers((prevUsers) => {
         console.log(" Current users in state before update:", prevUsers.length);
 
         // Check if sender exists in users list
-        const senderExists = prevUsers.some(u => u.id === messageData.senderId);
+        const senderExists = prevUsers.some(
+          (u) => u.id === messageData.senderId
+        );
         console.log(" Sender exists in users list:", senderExists);
 
         if (!senderExists) {
-          console.log(" SENDER NOT IN LIST! This might be the issue. Users list:", prevUsers.map(u => ({id: u.id, name: u.userName})));
+          console.log(
+            " SENDER NOT IN LIST! This might be the issue. Users list:",
+            prevUsers.map((u) => ({ id: u.id, name: u.userName }))
+          );
         }
 
         const updated = prevUsers.map((u) => {
@@ -245,7 +280,7 @@ const Home = () => {
             console.log(" Found sender in users list, updating lastMessage:", {
               content: messageData.content,
               createdAt: messageData.createdAt,
-              senderId: messageData.senderId
+              senderId: messageData.senderId,
             });
             return {
               ...u,
@@ -254,9 +289,10 @@ const Home = () => {
                 createdAt: messageData.createdAt,
                 senderId: messageData.senderId,
               },
-              unreadCount: selectedUserRef.current?.id === messageData.senderId
-                ? u.unreadCount
-                : (u.unreadCount || 0) + 1,
+              unreadCount:
+                selectedUserRef.current?.id === messageData.senderId
+                  ? u.unreadCount
+                  : (u.unreadCount || 0) + 1,
             };
           }
           return u;
@@ -269,11 +305,19 @@ const Home = () => {
     // Listen for message sent confirmation (for sender's UI update)
     socket.on("message_sent", (messageData) => {
       console.log(" Message sent confirmation:", messageData);
-      console.log(" Receiver ID:", messageData.receiverId, "Content:", messageData.content);
+      console.log(
+        " Receiver ID:",
+        messageData.receiverId,
+        "Content:",
+        messageData.content
+      );
 
       // Update user list to show the message in the receiver's entry
       setUsers((prevUsers) => {
-        console.log(" Updating sender's user list, total users:", prevUsers.length);
+        console.log(
+          " Updating sender's user list, total users:",
+          prevUsers.length
+        );
         const updated = prevUsers.map((u) => {
           if (u.id === messageData.receiverId) {
             console.log(" Found receiver in users list, updating lastMessage");
@@ -298,7 +342,10 @@ const Home = () => {
       console.log(" Received group message:", messageData);
 
       // Add message to chat if it's in the currently selected group
-      if (selectedGroupRef.current && messageData.groupId === selectedGroupRef.current.id) {
+      if (
+        selectedGroupRef.current &&
+        messageData.groupId === selectedGroupRef.current.id
+      ) {
         setMessages((prevMessages) => [...prevMessages, messageData]);
       }
 
@@ -311,7 +358,8 @@ const Home = () => {
               lastMessage: {
                 content: messageData.content,
                 createdAt: messageData.createdAt,
-                senderName: messageData.senderUserName || messageData.senderName,
+                senderName:
+                  messageData.senderUserName || messageData.senderName,
               },
             };
           }
@@ -324,9 +372,12 @@ const Home = () => {
     socket.on("group_created", (groupData) => {
       console.log(" New group created:", groupData);
       // Add group to list if current user is a member
-      if (groupData.memberIds && groupData.memberIds.includes(currentUserRef.current?.id)) {
+      if (
+        groupData.memberIds &&
+        groupData.memberIds.includes(currentUserRef.current?.id)
+      ) {
         setGroups((prevGroups) => {
-          const exists = prevGroups.find(g => g.id === groupData.group.id);
+          const exists = prevGroups.find((g) => g.id === groupData.group.id);
           if (!exists) {
             return [...prevGroups, { ...groupData.group, role: "member" }];
           }
@@ -339,7 +390,7 @@ const Home = () => {
     socket.on("added_to_group", (groupData) => {
       console.log(" Added to group:", groupData);
       setGroups((prevGroups) => {
-        const exists = prevGroups.find(g => g.id === groupData.id);
+        const exists = prevGroups.find((g) => g.id === groupData.id);
         if (!exists) {
           return [...prevGroups, { ...groupData, role: "member" }];
         }
@@ -355,11 +406,19 @@ const Home = () => {
     // Listen for profile updates from server (broadcasts to all connected clients)
     socket.on("profile_updated", (data) => {
       console.log(" Profile updated from server:", data);
-      console.log(" Current user ID:", currentUserRef.current?.id, "Updated user ID:", data.userId);
+      console.log(
+        " Current user ID:",
+        currentUserRef.current?.id,
+        "Updated user ID:",
+        data.userId
+      );
 
       // If it's the current user's profile that was updated
       if (data.userId === currentUserRef.current?.id) {
-        console.log(" Updating CURRENT user profile in state and localStorage:", data.user);
+        console.log(
+          " Updating CURRENT user profile in state and localStorage:",
+          data.user
+        );
         setCurrentUser(data.user);
         localStorage.setItem("user", JSON.stringify(data.user));
         console.log(" Current user updated in localStorage");
@@ -371,7 +430,12 @@ const Home = () => {
       setUsers((prevUsers) => {
         const updated = prevUsers.map((u) => {
           if (u.id === data.userId) {
-            console.log(" Updating user in list:", data.userId, "with new data:", data.user);
+            console.log(
+              " Updating user in list:",
+              data.userId,
+              "with new data:",
+              data.user
+            );
             return { ...u, ...data.user };
           }
           return u;
@@ -471,7 +535,10 @@ const Home = () => {
               }
               return user;
             } catch (error) {
-              console.error(`Error fetching messages for user ${user.id}:`, error);
+              console.error(
+                `Error fetching messages for user ${user.id}:`,
+                error
+              );
               return user;
             }
           })
@@ -525,7 +592,10 @@ const Home = () => {
               }
               return group;
             } catch (error) {
-              console.error(`Error fetching messages for group ${group.id}:`, error);
+              console.error(
+                `Error fetching messages for group ${group.id}:`,
+                error
+              );
               return group;
             }
           })
@@ -557,16 +627,15 @@ const Home = () => {
 
     const query = searchQuery.toLowerCase();
     setFilteredUsers(
-      users.filter((user) =>
-        (user.userName?.toLowerCase().includes(query)) ||
-        (user.name?.toLowerCase().includes(query)) ||
-        (user.email?.toLowerCase().includes(query))
+      users.filter(
+        (user) =>
+          user.userName?.toLowerCase().includes(query) ||
+          user.name?.toLowerCase().includes(query) ||
+          user.email?.toLowerCase().includes(query)
       )
     );
     setFilteredGroups(
-      groups.filter((group) =>
-        group.name?.toLowerCase().includes(query)
-      )
+      groups.filter((group) => group.name?.toLowerCase().includes(query))
     );
   }, [searchQuery, users, groups]);
 
@@ -712,7 +781,7 @@ const Home = () => {
       if (selectedGroup) {
         console.log("Sending group message:", {
           groupId: selectedGroup.id,
-          content: messageContent
+          content: messageContent,
         });
 
         // Send group message
@@ -736,7 +805,7 @@ const Home = () => {
       } else if (selectedUser) {
         console.log("Sending direct message:", {
           receiverId: selectedUser.id,
-          content: messageContent
+          content: messageContent,
         });
 
         // Send direct message
@@ -793,14 +862,11 @@ const Home = () => {
     setCreatingGroup(true);
 
     try {
-      const response = await axiosInstance.post(
-        `/api/groups/create`,
-        {
-          name: groupName.trim(),
-          description: groupDescription.trim(),
-          memberIds: selectedMembers,
-        }
-      );
+      const response = await axiosInstance.post(`/api/groups/create`, {
+        name: groupName.trim(),
+        description: groupDescription.trim(),
+        memberIds: selectedMembers,
+      });
 
       // console.log(" Group created:", response.data);
 
@@ -835,14 +901,11 @@ const Home = () => {
 
     try {
       // console.log(" Sending profile update to server...");
-      const response = await axiosInstance.put(
-        `/api/user/update`,
-        {
-          name: editName,
-          email: editEmail,
-          image: editImage,
-        }
-      );
+      const response = await axiosInstance.put(`/api/user/update`, {
+        name: editName,
+        email: editEmail,
+        image: editImage,
+      });
 
       // console.log(" Profile updated from server:", response.data);
 
@@ -880,7 +943,10 @@ const Home = () => {
       alert("Profile updated successfully!");
     } catch (error) {
       // console.error(" Error updating profile:", error);
-      alert("Failed to update profile: " + (error.response?.data?.message || error.message));
+      alert(
+        "Failed to update profile: " +
+          (error.response?.data?.message || error.message)
+      );
     } finally {
       setUpdatingProfile(false);
     }
@@ -930,12 +996,7 @@ const Home = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500 mb-4" />
-        <p className="text-slate-600">Loading Chatly...</p>
-      </div>
-    );
+    return <SplashScreen duration={2700} />;
   }
 
   const selectedChat = selectedUser || selectedGroup;
@@ -943,61 +1004,95 @@ const Home = () => {
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden">
       {/* Sidebar - Hidden on mobile when chat is selected */}
-      <div className={`${
-        selectedChat ? 'hidden md:flex' : 'flex'
-      } w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex flex-col h-screen md:h-screen overflow-hidden transition-all duration-300`}>
+      <div
+        className={`${
+          selectedChat ? "hidden md:flex" : "flex"
+        } w-full md:w-80 lg:w-96 bg-white border-r border-slate-200 flex flex-col h-screen md:h-screen overflow-hidden transition-all duration-300`}
+      >
         {/* Header */}
         <div className="p-4 border-b border-slate-200 flex-shrink-0">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-xl flex items-center justify-center">
-                <MessageSquare className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-cyan-500 to-cyan-700 bg-clip-text text-transparent">Chatly</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleLogout}
-              className="text-slate-600 hover:text-red-500 h-10 w-10"
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
             >
-              <LogOut className="w-5 h-5" />
-            </Button>
-          </div>
-
-          {/* Current User with Profile Menu */}
-          <div className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg">
-            <Avatar className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-cyan-600">
-              {/* {console.log("Current User Avatar Image:", currentUser?.image)} */}
-              <AvatarImage src={currentUser?.image || ""} alt="User Avatar" />
-              <AvatarFallback  className="text-white font-semibold text-sm">
-                {getInitials(currentUser?.userName || currentUser?.name)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="font-semibold text-slate-800 truncate text-sm">
-                  {currentUser?.userName || currentUser?.name}
-                </p>
-                <Circle
-                  className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    socketConnected ? "fill-green-500 text-green-500" : "fill-slate-400 text-slate-400"
-                  }`}
-                />
-              </div>
-              <p className="text-xs text-slate-500 truncate">{currentUser?.email}</p>
-            </div>
+              <Logo className="w-10 h-10" />
+              <span className="text-xl font-bold text-[#040316]">VibeMesh</span>
+            </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
-                  <MoreVertical className="w-4 h-4 text-slate-600" />
-                </Button>
+                <button className="flex-shrink-0 rounded-full p-0.5 bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:opacity-80 transition-all cursor-pointer shadow-md">
+                  <Avatar className="w-10 h-10 bg-gradient-to-br from-primaryColor to-secondaryColor border-2 border-white">
+                    <AvatarImage
+                      src={currentUser?.image || ""}
+                      alt="User Avatar"
+                    />
+                    <AvatarFallback className="text-white font-semibold text-sm">
+                      {getInitials(currentUser?.userName || currentUser?.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => setShowEditProfile(true)}>
-                  <User className="w-4 h-4 mr-2" />
-                  Edit Profile
-                </DropdownMenuItem>
+              <DropdownMenuContent
+                align="end"
+                className="w-64 rounded-xl shadow-lg border border-slate-200"
+              >
+                {/* User Info Header */}
+                <div className="px-3 py-3 border-b border-slate-200">
+                  <div className="flex items-center gap-3">
+                    <div className="p-0.5 bg-gradient-to-r from-[#040316] to-[#1a1a2e] rounded-full flex-shrink-0">
+                      <Avatar className="w-12 h-12 bg-gradient-to-br from-primaryColor to-secondaryColor border-2 border-white">
+                        <AvatarImage
+                          src={currentUser?.image || ""}
+                          alt="User Avatar"
+                        />
+                        <AvatarFallback className="text-white font-semibold">
+                          {getInitials(
+                            currentUser?.userName || currentUser?.name
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-slate-800 truncate text-sm">
+                          {currentUser?.userName || currentUser?.name}
+                        </p>
+                        <Circle
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                            socketConnected
+                              ? "fill-green-500 text-green-500"
+                              : "fill-slate-400 text-slate-400"
+                          }`}
+                        />
+                      </div>
+                      <p className="text-xs text-slate-500 truncate">
+                        {currentUser?.email}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Menu Items */}
+                <div className="py-1">
+                  <DropdownMenuItem
+                    onClick={() => setShowEditProfile(true)}
+                    className="cursor-pointer hover:bg-gradient-to-r hover:from-primaryColor/10 hover:to-secondaryColor/10 rounded-lg py-2.5 px-3 mx-1"
+                  >
+                    <User className="w-4 h-4 mr-3 text-darkPurple" />
+                    <span className="font-medium text-slate-700">
+                      Edit Profile
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="my-1" />
+                  <DropdownMenuItem
+                    onClick={handleLogout}
+                    className="cursor-pointer hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 rounded-lg py-2.5 px-3 mx-1"
+                  >
+                    <LogOut className="w-4 h-4 mr-3 text-red-500" />
+                    <span className="font-medium text-slate-700">Log out</span>
+                  </DropdownMenuItem>
+                </div>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -1011,33 +1106,40 @@ const Home = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search conversations..."
-              className="pl-10 bg-slate-50 border-slate-200 focus:border-cyan-400 focus:ring-cyan-400"
+              className="pl-10 bg-slate-50 border-slate-200 focus:border-darkPurple focus:ring-darkPurple"
             />
           </div>
         </div>
 
         {/* Tabs for Users and Groups */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden min-h-0">
-          <div className="border-b border-slate-200 flex-shrink-0">
-            <TabsList className="w-full grid grid-cols-2 bg-transparent h-auto p-2">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex-1 flex flex-col overflow-hidden min-h-0"
+        >
+          <div className="border-b border-slate-200 flex-shrink-0 bg-slate-50">
+            <TabsList className="w-full grid grid-cols-2 bg-transparent h-auto p-2 gap-2">
               <TabsTrigger
                 value="users"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-cyan-500 data-[state=active]:text-cyan-600 text-slate-600 py-3"
+                className="rounded-xl border-2 border-transparent data-[state=active]:bg-gradient-to-r data-[state=active]:from-primaryColor/20 data-[state=active]:to-secondaryColor/20 data-[state=active]:border-darkPurple/30 data-[state=active]:text-darkPurple text-slate-600 py-2.5 font-medium transition-all duration-300 hover:bg-slate-100"
               >
                 <Users className="w-4 h-4 mr-2" />
-                <span className="text-sm font-medium">Users</span>
+                <span className="text-sm font-semibold">Users</span>
               </TabsTrigger>
               <TabsTrigger
                 value="groups"
-                className="rounded-none border-b-2 border-transparent data-[state=active]:border-cyan-500 data-[state=active]:text-cyan-600 text-slate-600 py-3"
+                className="rounded-xl border-2 border-transparent data-[state=active]:bg-gradient-to-r data-[state=active]:from-primaryColor/20 data-[state=active]:to-secondaryColor/20 data-[state=active]:border-darkPurple/30 data-[state=active]:text-darkPurple text-slate-600 py-2.5 font-medium transition-all duration-300 hover:bg-slate-100"
               >
                 <Hash className="w-4 h-4 mr-2" />
-                <span className="text-sm font-medium">Groups</span>
+                <span className="text-sm font-semibold">Groups</span>
               </TabsTrigger>
             </TabsList>
           </div>
 
-          <TabsContent value="users" className="flex-1 m-0 overflow-hidden min-h-0">
+          <TabsContent
+            value="users"
+            className="flex-1 m-0 overflow-hidden min-h-0"
+          >
             <ScrollArea className="h-full w-full">
               {filteredUsers.length === 0 ? (
                 <p className="text-center text-slate-500 text-sm py-8">
@@ -1054,20 +1156,25 @@ const Home = () => {
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
                         selectedUser?.id === user.id && !selectedGroup
-                          ? "bg-cyan-50 border-l-4 border-cyan-500"
+                          ? "bg-gradient-to-r from-primaryColor/10 to-secondaryColor/10 border-l-4 border-[#040316]"
                           : "hover:bg-slate-50 border-l-4 border-transparent"
                       }`}
                     >
                       <div className="relative flex-shrink-0">
-                        <Avatar className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-cyan-600">
-                          <AvatarImage src={user?.image || ""} alt="User Avatar" />
+                        <Avatar className="w-12 h-12 bg-gradient-to-br from-primaryColor to-secondaryColor">
+                          <AvatarImage
+                            src={user?.image || ""}
+                            alt="User Avatar"
+                          />
                           <AvatarFallback className="text-white font-semibold text-sm">
                             {getInitials(user.userName || user.name)}
                           </AvatarFallback>
                         </Avatar>
                         <Circle
                           className={`w-3 h-3 absolute bottom-0 right-0 rounded-full border-2 border-white ${
-                            user.isOnline ? "fill-green-500 text-green-500" : "fill-slate-400 text-slate-400"
+                            user.isOnline
+                              ? "fill-green-500 text-green-500"
+                              : "fill-slate-400 text-slate-400"
                           }`}
                         />
                       </div>
@@ -1085,14 +1192,18 @@ const Home = () => {
                         <div className="flex items-center justify-between gap-2">
                           {user.lastMessage ? (
                             <p className="text-xs text-slate-600 break-words flex-1 line-clamp-1">
-                              {user.lastMessage.senderId === currentUser.id ? "You: " : ""}
+                              {user.lastMessage.senderId === currentUser.id
+                                ? "You: "
+                                : ""}
                               {truncateMessage(user.lastMessage.content, 50)}
                             </p>
                           ) : (
-                            <p className="text-xs text-slate-400 italic">No messages yet</p>
+                            <p className="text-xs text-slate-400 italic">
+                              No messages yet
+                            </p>
                           )}
                           {user.unreadCount > 0 && (
-                            <span className="bg-cyan-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 min-h-5 min-w-5">
+                            <span className="bg-gradient-to-r from-darkPurple to-primaryColor text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 min-h-5 min-w-5 shadow-md">
                               {user.unreadCount}
                             </span>
                           )}
@@ -1105,7 +1216,10 @@ const Home = () => {
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="groups" className="flex-1 m-0 overflow-hidden flex flex-col min-h-0">
+          <TabsContent
+            value="groups"
+            className="flex-1 m-0 overflow-hidden flex flex-col min-h-0"
+          >
             <div className="p-3 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
               <span className="text-sm font-semibold text-slate-700">
                 My Groups ({groups.length})
@@ -1113,7 +1227,7 @@ const Home = () => {
               <Button
                 size="sm"
                 onClick={() => setShowCreateGroup(true)}
-                className="h-8 px-3 bg-gradient-to-r from-cyan-400 to-cyan-600 hover:from-cyan-500 hover:to-cyan-700 text-sm"
+                className="h-8 px-3 bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white font-medium text-sm shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
               >
                 <Plus className="w-4 h-4 mr-1" />
                 New
@@ -1151,11 +1265,11 @@ const Home = () => {
                       }}
                       className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
                         selectedGroup?.id === group.id && !selectedUser
-                          ? "bg-cyan-50 border-l-4 border-cyan-500"
+                          ? "bg-gradient-to-r from-primaryColor/10 to-secondaryColor/10 border-l-4 border-[#040316]"
                           : "hover:bg-slate-50 border-l-4 border-transparent"
                       }`}
                     >
-                      <Avatar className="w-12 h-12 bg-gradient-to-br from-cyan-400 to-cyan-600 flex-shrink-0">
+                      <Avatar className="w-12 h-12 bg-gradient-to-br from-primaryColor to-secondaryColor flex-shrink-0">
                         <AvatarFallback className="text-white font-semibold text-sm">
                           {getInitials(group.name)}
                         </AvatarFallback>
@@ -1163,7 +1277,7 @@ const Home = () => {
                       <div className="flex-1 text-left min-w-0">
                         <div className="flex items-start justify-between gap-2 mb-0.5">
                           <div className="flex items-center gap-1 min-w-0 flex-1">
-                            <Hash className="w-3 h-3 text-cyan-500 flex-shrink-0 mt-0.5" />
+                            <Hash className="w-3 h-3 text-darkPurple flex-shrink-0 mt-0.5" />
                             <p className="font-semibold text-slate-800 text-xs sm:text-sm break-words flex-1">
                               {group.name}
                             </p>
@@ -1177,13 +1291,16 @@ const Home = () => {
                         <div className="flex items-center justify-between gap-2">
                           {group.lastMessage ? (
                             <p className="text-xs text-slate-600 break-words flex-1 line-clamp-1">
-                              {group.lastMessage.senderName}: {truncateMessage(group.lastMessage.content, 40)}
+                              {group.lastMessage.senderName}:{" "}
+                              {truncateMessage(group.lastMessage.content, 40)}
                             </p>
                           ) : (
-                            <p className="text-xs text-slate-400 italic">No messages yet</p>
+                            <p className="text-xs text-slate-400 italic">
+                              No messages yet
+                            </p>
                           )}
                           {group.role === "admin" && (
-                            <span className="bg-cyan-100 text-cyan-700 text-xs px-2 py-0.5 rounded font-semibold flex-shrink-0 whitespace-nowrap">
+                            <span className="bg-gradient-to-r from-primaryColor/20 to-secondaryColor/20 text-darkPurple text-xs px-2 py-0.5 rounded font-semibold flex-shrink-0 whitespace-nowrap">
                               Admin
                             </span>
                           )}
@@ -1199,9 +1316,11 @@ const Home = () => {
       </div>
 
       {/* Chat Area - Hidden on mobile when no chat is selected */}
-      <div className={`${
-        !selectedChat ? 'hidden md:flex' : 'flex'
-      } flex-1 flex flex-col h-screen md:h-screen overflow-hidden min-h-0 transition-all duration-300`}>
+      <div
+        className={`${
+          !selectedChat ? "hidden md:flex" : "flex"
+        } flex-1 flex flex-col h-screen md:h-screen overflow-hidden min-h-0 transition-all duration-300`}
+      >
         {selectedChat ? (
           <>
             {/* Chat Header */}
@@ -1220,27 +1339,38 @@ const Home = () => {
                     <ArrowLeft className="w-5 h-5" />
                   </Button>
                   <div className="relative flex-shrink-0">
-                    <Avatar className={`w-10 h-10 sm:w-11 sm:h-11 ${
-                      selectedGroup
-                        ? "bg-gradient-to-br from-cyan-400 to-cyan-600"
-                        : "bg-gradient-to-br from-cyan-400 to-cyan-600"
-                    }`}>
-                      <AvatarImage src={selectedChat?.image || ""} alt="User Avatar" />
+                    <Avatar
+                      className={`w-10 h-10 sm:w-11 sm:h-11 ${
+                        selectedGroup
+                          ? "bg-gradient-to-br from-primaryColor to-secondaryColor"
+                          : "bg-gradient-to-br from-primaryColor to-secondaryColor"
+                      }`}
+                    >
+                      <AvatarImage
+                        src={selectedChat?.image || ""}
+                        alt="User Avatar"
+                      />
                       <AvatarFallback className="text-white font-semibold text-xs sm:text-sm">
-                        {getInitials(selectedChat.userName || selectedChat.name)}
+                        {getInitials(
+                          selectedChat.userName || selectedChat.name
+                        )}
                       </AvatarFallback>
                     </Avatar>
                     {selectedUser && (
                       <Circle
                         className={`w-3 h-3 absolute bottom-0 right-0 rounded-full border-2 border-white ${
-                          selectedUser.isOnline ? "fill-green-500 text-green-500" : "fill-slate-400 text-slate-400"
+                          selectedUser.isOnline
+                            ? "fill-green-500 text-green-500"
+                            : "fill-slate-400 text-slate-400"
                         }`}
                       />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start gap-1 sm:gap-2">
-                      {selectedGroup && <Hash className="w-3 h-3 sm:w-4 sm:h-4 text-cyan-500 flex-shrink-0 mt-0.5" />}
+                      {selectedGroup && (
+                        <Hash className="w-3 h-3 sm:w-4 sm:h-4 text-darkPurple flex-shrink-0 mt-0.5" />
+                      )}
                       <p className="font-semibold text-slate-800 text-sm sm:text-base break-words">
                         {selectedChat.userName || selectedChat.name}
                       </p>
@@ -1248,25 +1378,51 @@ const Home = () => {
                     <p className="text-xs sm:text-sm flex items-center gap-1">
                       {selectedUser ? (
                         <>
-                          <Circle className={`w-2 h-2 flex-shrink-0 ${selectedUser.isOnline ? "fill-green-500 text-green-500" : "fill-slate-400 text-slate-400"}`} />
-                          <span className={selectedUser.isOnline ? "text-green-600" : "text-slate-500"}>
+                          <Circle
+                            className={`w-2 h-2 flex-shrink-0 ${
+                              selectedUser.isOnline
+                                ? "fill-green-500 text-green-500"
+                                : "fill-slate-400 text-slate-400"
+                            }`}
+                          />
+                          <span
+                            className={
+                              selectedUser.isOnline
+                                ? "text-green-600"
+                                : "text-slate-500"
+                            }
+                          >
                             {selectedUser.isOnline ? "Online" : "Offline"}
                           </span>
                         </>
                       ) : (
-                        <span className="text-slate-500 line-clamp-2">{selectedGroup?.description || "Group chat"}</span>
+                        <span className="text-slate-500 line-clamp-2">
+                          {selectedGroup?.description || "Group chat"}
+                        </span>
                       )}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-                  <Button variant="ghost" size="icon" className="text-slate-600 hover:text-cyan-600 h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex"
+                  >
                     <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="text-slate-600 hover:text-cyan-600 h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex"
+                  >
                     <Video className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="text-slate-600 hover:text-cyan-600 h-9 w-9 sm:h-10 sm:w-10">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10"
+                  >
                     <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
                 </div>
@@ -1288,24 +1444,34 @@ const Home = () => {
                     return (
                       <div
                         key={msg.id || idx}
-                        className={`flex ${isOwn ? "justify-end" : "justify-start"}`}
+                        className={`flex ${
+                          isOwn ? "justify-end" : "justify-start"
+                        }`}
                       >
                         <div
                           className={`max-w-[85%] xs:max-w-[80%] sm:max-w-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
                             isOwn
-                              ? "bg-gradient-to-r from-cyan-400 to-cyan-600 text-white rounded-br-sm"
-                              : "bg-white text-slate-800 border border-slate-200 rounded-bl-sm shadow-sm"
+                              ? "bg-gradient-to-r from-primaryColor/50 via-secondaryColor/50 to-lightPurple/50 text-slate-800 rounded-br-sm shadow-md border border-primaryColor/30"
+                              : "bg-gradient-to-r from-[#040316] to-[#1a1a2e] text-white rounded-bl-sm shadow-lg"
                           }`}
                         >
                           {selectedGroup && !isOwn && (
-                            <p className={`text-xs font-semibold mb-1 ${isOwn ? "text-cyan-100" : "text-cyan-600"}`}>
+                            <p
+                              className={`text-xs font-semibold mb-1 ${
+                                isOwn
+                                  ? "text-darkPurple"
+                                  : "text-primaryColor/80"
+                              }`}
+                            >
                               {msg.senderUserName || msg.senderName}
                             </p>
                           )}
-                          <p className="text-xs max-w-full sm:text-sm wrap-break-words break-all">{msg.content}</p>
+                          <p className="text-xs max-w-full sm:text-sm wrap-break-words break-all">
+                            {msg.content}
+                          </p>
                           <p
                             className={`text-xs mt-1 ${
-                              isOwn ? "text-cyan-100" : "text-slate-400"
+                              isOwn ? "text-slate-600" : "text-white/80"
                             }`}
                           >
                             {new Date(msg.createdAt).toLocaleTimeString([], {
@@ -1324,12 +1490,15 @@ const Home = () => {
 
             {/* Message Input */}
             <div className="bg-white border-t border-slate-200 p-2 sm:p-4 flex-shrink-0">
-              <form onSubmit={handleSendMessage} className="flex items-center gap-1 sm:gap-2">
+              <form
+                onSubmit={handleSendMessage}
+                className="flex items-center gap-1 sm:gap-2"
+              >
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="text-slate-600 hover:text-cyan-600 h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex"
+                  className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex"
                 >
                   <Paperclip className="w-4 h-4 sm:w-5 sm:h-5" />
                 </Button>
@@ -1337,14 +1506,14 @@ const Home = () => {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Type a message..."
-                  className="flex-1 border-slate-300 focus:border-cyan-500 focus:ring-cyan-500 text-sm sm:text-base h-9 sm:h-10"
+                  className="flex-1 border-slate-300 focus:border-darkPurple focus:ring-darkPurple text-sm sm:text-base h-9 sm:h-10"
                   disabled={sending || !socketConnected}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="text-slate-600 hover:text-cyan-600 h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex"
+                  className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10 hidden sm:flex"
                 >
                   <Smile className="w-4 h-4 sm:w-5 sm:h-5" />
                 </Button>
@@ -1352,7 +1521,7 @@ const Home = () => {
                   type="submit"
                   disabled={sending || !newMessage.trim() || !socketConnected}
                   size="icon"
-                  className="bg-gradient-to-r from-cyan-400 to-cyan-600 hover:from-cyan-500 hover:to-cyan-700 h-9 w-9 sm:h-10 sm:w-10"
+                  className="bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] h-9 w-9 sm:h-10 sm:w-10 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
                 >
                   {sending ? (
                     <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 animate-spin" />
@@ -1366,13 +1535,18 @@ const Home = () => {
         ) : (
           <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50 p-4">
             <div className="text-center text-slate-400">
-              <div className="w-24 h-24 mx-auto mb-6 bg-gradient-to-br from-cyan-400 to-cyan-600 rounded-full flex items-center justify-center">
-                <MessageSquare className="w-12 h-12 text-white" />
+              <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                <Logo className="w-24 h-24" />
               </div>
               <p className="text-2xl font-semibold mb-2">
-                Welcome to <span className="bg-gradient-to-r from-cyan-500 to-cyan-700 bg-clip-text text-transparent">Chatly</span>
+                Welcome to{" "}
+                <span className="bg-gradient-to-r from-darkPurple to-primaryColor bg-clip-text text-transparent">
+                  VibeMesh
+                </span>
               </p>
-              <p className="text-sm">Select a conversation to start messaging</p>
+              <p className="text-sm">
+                Select a conversation to start messaging
+              </p>
             </div>
           </div>
         )}
@@ -1382,8 +1556,8 @@ const Home = () => {
       <Dialog open={showCreateGroup} onOpenChange={setShowCreateGroup}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <Hash className="w-5 h-5 text-cyan-500" />
+            <DialogTitle className="flex items-center gap-2 text-xl text-[#040316]">
+              <Hash className="w-5 h-5 text-darkPurple" />
               Create New Group
             </DialogTitle>
             <DialogDescription className="text-sm">
@@ -1399,7 +1573,7 @@ const Home = () => {
                 onChange={(e) => setGroupName(e.target.value)}
                 placeholder="Enter group name"
                 required
-                className="h-11"
+                className="h-11 focus:border-darkPurple focus:ring-darkPurple"
               />
             </div>
             <div className="space-y-2">
@@ -1409,7 +1583,7 @@ const Home = () => {
                 value={groupDescription}
                 onChange={(e) => setGroupDescription(e.target.value)}
                 placeholder="Enter group description (optional)"
-                className="resize-none"
+                className="resize-none focus:border-darkPurple focus:ring-darkPurple"
                 rows={3}
               />
             </div>
@@ -1427,28 +1601,43 @@ const Home = () => {
                         key={user.id}
                         type="button"
                         onClick={() => toggleMember(user.id)}
-                        className={`w-full flex items-center gap-3 p-2 rounded-lg transition-colors ${
+                        className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-300 ${
                           selectedMembers.includes(user.id)
-                            ? "bg-cyan-50 border-2 border-cyan-200"
-                            : "hover:bg-slate-50 border-2 border-transparent"
+                            ? "bg-gradient-to-r from-primaryColor/40 via-secondaryColor/40 to-lightPurple/40 border-2 border-primaryColor/50 shadow-lg"
+                            : "bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 hover:border-slate-300"
                         }`}
                       >
-                        <Avatar className="w-10 h-10 bg-gradient-to-br from-cyan-400 to-cyan-600">
-                          <AvatarImage src={user?.image || ""} alt="User Avatar" />
+                        <Avatar className="w-10 h-10 bg-gradient-to-br from-primaryColor to-secondaryColor">
+                          <AvatarImage
+                            src={user?.image || ""}
+                            alt="User Avatar"
+                          />
                           <AvatarFallback className="text-white font-semibold text-sm">
                             {getInitials(user.userName || user.name)}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1 text-left min-w-0">
-                          <p className="font-semibold text-slate-800 truncate text-sm">
+                          <p className="font-semibold truncate text-sm text-slate-800">
                             {user.userName || user.name}
                           </p>
-                          <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                          <p className="text-xs truncate text-slate-500">
+                            {user.email}
+                          </p>
                         </div>
                         {selectedMembers.includes(user.id) && (
-                          <div className="w-5 h-5 bg-cyan-500 rounded-full flex items-center justify-center flex-shrink-0">
-                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          <div className="w-6 h-6 bg-gradient-to-r from-[#040316] to-[#1a1a2e] rounded-full flex items-center justify-center flex-shrink-0 shadow-md">
+                            <svg
+                              className="w-3.5 h-3.5 text-white"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={3}
+                                d="M5 13l4 4L19 7"
+                              />
                             </svg>
                           </div>
                         )}
@@ -1459,7 +1648,8 @@ const Home = () => {
               </ScrollArea>
               {selectedMembers.length > 0 && (
                 <p className="text-xs text-slate-500 mt-2">
-                  {selectedMembers.length} member{selectedMembers.length > 1 ? 's' : ''} selected
+                  {selectedMembers.length} member
+                  {selectedMembers.length > 1 ? "s" : ""} selected
                 </p>
               )}
             </div>
@@ -1475,7 +1665,7 @@ const Home = () => {
               <Button
                 type="submit"
                 disabled={creatingGroup || !groupName.trim()}
-                className="bg-gradient-to-r from-cyan-400 to-cyan-600 hover:from-cyan-500 hover:to-cyan-700"
+                className="bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
               >
                 {creatingGroup ? (
                   <>
@@ -1495,8 +1685,8 @@ const Home = () => {
       <Dialog open={showEditProfile} onOpenChange={setShowEditProfile}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl">
-              <User className="w-5 h-5 text-cyan-500" />
+            <DialogTitle className="flex items-center gap-2 text-xl text-[#040316]">
+              <User className="w-5 h-5 text-darkPurple" />
               Edit Profile
             </DialogTitle>
             <DialogDescription className="text-sm">
@@ -1514,7 +1704,7 @@ const Home = () => {
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 placeholder="Enter your name"
-                className="h-11"
+                className="h-11 focus:border-darkPurple focus:ring-darkPurple"
               />
             </div>
             <div className="space-y-2">
@@ -1528,7 +1718,7 @@ const Home = () => {
                 value={editEmail}
                 onChange={(e) => setEditEmail(e.target.value)}
                 placeholder="Enter your email"
-                className="h-11"
+                className="h-11 focus:border-darkPurple focus:ring-darkPurple"
               />
             </div>
             <div className="space-y-2">
@@ -1541,7 +1731,7 @@ const Home = () => {
                 value={editImage}
                 onChange={(e) => setEditImage(e.target.value)}
                 placeholder="Enter image URL"
-                className="h-11"
+                className="h-11 focus:border-darkPurple focus:ring-darkPurple"
               />
             </div>
             <DialogFooter className="gap-2">
@@ -1556,7 +1746,7 @@ const Home = () => {
               <Button
                 type="submit"
                 disabled={updatingProfile}
-                className="bg-gradient-to-r from-cyan-400 to-cyan-600 hover:from-cyan-500 hover:to-cyan-700"
+                className="bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
               >
                 {updatingProfile ? (
                   <>
@@ -1575,4 +1765,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default ChatWindow;
