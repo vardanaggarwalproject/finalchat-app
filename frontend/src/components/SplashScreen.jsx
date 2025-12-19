@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable react-hooks/purity */
 import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Logo from "./Logo";
@@ -45,7 +47,8 @@ export function SplashScreen({ onComplete, duration = 3500 }) {
           transition={{ duration: 0.5 }}
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{
-            background: "linear-gradient(135deg, #EEC7F4 0%, #ABD4FF 50%, #C4B5FD 100%)",
+            background:
+              "linear-gradient(135deg, #EEC7F4 0%, #ABD4FF 50%, #C4B5FD 100%)",
           }}
         >
           {/* Animated background particles */}

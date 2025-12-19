@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import React, { useEffect, useState, useRef } from "react";
 import socket from "../socket";
 import { useParams, useNavigate } from "react-router-dom";
@@ -12,7 +13,7 @@ export default function ChatPage() {
   const [typingUsers, setTypingUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
-  
+
   const { roomId } = useParams();
   const navigate = useNavigate();
   const chatEndRef = useRef(null);
@@ -45,7 +46,9 @@ export default function ChatPage() {
 
         // Fetch message history
         const messagesResponse = await axios.get(
-          `http://${import.meta.env.VITE_BACKEND_URL}/api/groups/${roomId}/messages`,
+          `http://${
+            import.meta.env.VITE_BACKEND_URL
+          }/api/groups/${roomId}/messages`,
           { withCredentials: true }
         );
         setChat(messagesResponse.data.messages);
@@ -220,7 +223,9 @@ export default function ChatPage() {
         {/* Header */}
         <div className="bg-white border-b px-6 py-4 flex justify-between items-center shadow-sm">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">{groupInfo?.name}</h2>
+            <h2 className="text-xl font-bold text-slate-800">
+              {groupInfo?.name}
+            </h2>
             {groupInfo?.description && (
               <p className="text-sm text-slate-600">{groupInfo.description}</p>
             )}
@@ -245,7 +250,9 @@ export default function ChatPage() {
               return (
                 <div
                   key={msg.id || i}
-                  className={`flex ${isOwnMessage ? "justify-end" : "justify-start"}`}
+                  className={`flex ${
+                    isOwnMessage ? "justify-end" : "justify-start"
+                  }`}
                 >
                   <div
                     className={`max-w-md px-4 py-2 rounded-2xl shadow-sm ${
@@ -255,10 +262,15 @@ export default function ChatPage() {
                     }`}
                   >
                     {!isOwnMessage && (
-                      <p className={`text-xs font-semibold mb-1 ${
-                        isOwnMessage ? "text-cyan-100" : "text-slate-600"
-                      }`}>
-                        {msg.senderName || msg.senderUserName || msg.username || "Unknown"}
+                      <p
+                        className={`text-xs font-semibold mb-1 ${
+                          isOwnMessage ? "text-cyan-100" : "text-slate-600"
+                        }`}
+                      >
+                        {msg.senderName ||
+                          msg.senderUserName ||
+                          msg.username ||
+                          "Unknown"}
                       </p>
                     )}
                     <p className="break-words">{msg.content}</p>
@@ -267,10 +279,12 @@ export default function ChatPage() {
                         isOwnMessage ? "text-cyan-100" : "text-slate-500"
                       }`}
                     >
-                      {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      }) : ""}
+                      {msg.createdAt
+                        ? new Date(msg.createdAt).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })
+                        : ""}
                     </p>
                   </div>
                 </div>
@@ -288,7 +302,8 @@ export default function ChatPage() {
         {/* Typing Indicator */}
         {typingUsers.length > 0 && (
           <div className="px-6 py-2 text-sm text-slate-600 italic bg-white border-t">
-            {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"} typing...
+            {typingUsers.join(", ")} {typingUsers.length === 1 ? "is" : "are"}{" "}
+            typing...
           </div>
         )}
 
@@ -315,12 +330,17 @@ export default function ChatPage() {
 
       {/* Sidebar - Members */}
       <div className="w-64 bg-white border-l p-4 shadow-lg">
-        <h3 className="font-bold mb-4 text-slate-800">Members ({members.length})</h3>
+        <h3 className="font-bold mb-4 text-slate-800">
+          Members ({members.length})
+        </h3>
         <div className="space-y-2">
           {members.map((member) => {
             const isOnline = activeUsers.some((u) => u.userId === member.id);
             return (
-              <div key={member.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50">
+              <div
+                key={member.id}
+                className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50"
+              >
                 <div
                   className={`w-2 h-2 rounded-full ${
                     isOnline ? "bg-green-500" : "bg-gray-300"
@@ -330,7 +350,9 @@ export default function ChatPage() {
                   <p className="text-sm font-medium text-slate-800 truncate">
                     {member.name || member.userName}
                   </p>
-                  <p className="text-xs text-slate-500 capitalize">{member.role}</p>
+                  <p className="text-xs text-slate-500 capitalize">
+                    {member.role}
+                  </p>
                 </div>
               </div>
             );

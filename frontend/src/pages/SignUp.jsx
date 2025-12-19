@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -25,10 +26,11 @@ const SignUp = () => {
     setError(false);
 
     try {
-      const result = await axiosInstance.post(
-        `/api/auth/signup`,
-        { userName, email, password }
-      );
+      const result = await axiosInstance.post(`/api/auth/signup`, {
+        userName,
+        email,
+        password,
+      });
 
       // Store user and token in localStorage
       localStorage.setItem("user", JSON.stringify(result.data.user));
@@ -49,14 +51,15 @@ const SignUp = () => {
       setTimeout(() => {
         navigate("/chat", { replace: true });
       }, 100);
-
     } catch (error) {
       setLoading(false);
       setError(false);
 
       // Show error toast
       toast.error("Signup failed", {
-        description: error?.response?.data?.message || "Please try again with different credentials.",
+        description:
+          error?.response?.data?.message ||
+          "Please try again with different credentials.",
         duration: 4000,
       });
     }
@@ -79,7 +82,10 @@ const SignUp = () => {
           transition={{ duration: 0.4, delay: 0.4 }}
           className="space-y-2"
         >
-          <Label htmlFor="username" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+          <Label
+            htmlFor="username"
+            className="text-sm font-medium text-slate-700 flex items-center gap-2"
+          >
             <User className="w-4 h-4 text-slate-500" />
             Full name
           </Label>
@@ -101,7 +107,10 @@ const SignUp = () => {
           transition={{ duration: 0.4, delay: 0.5 }}
           className="space-y-2"
         >
-          <Label htmlFor="email" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+          <Label
+            htmlFor="email"
+            className="text-sm font-medium text-slate-700 flex items-center gap-2"
+          >
             <Mail className="w-4 h-4 text-slate-500" />
             Email
           </Label>
@@ -123,7 +132,10 @@ const SignUp = () => {
           transition={{ duration: 0.4, delay: 0.6 }}
           className="space-y-2"
         >
-          <Label htmlFor="password" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+          <Label
+            htmlFor="password"
+            className="text-sm font-medium text-slate-700 flex items-center gap-2"
+          >
             <Lock className="w-4 h-4 text-slate-500" />
             Password
           </Label>
@@ -145,7 +157,11 @@ const SignUp = () => {
               onClick={() => setShow((prev) => !prev)}
               className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
             >
-              {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              {show ? (
+                <EyeOff className="w-5 h-5" />
+              ) : (
+                <Eye className="w-5 h-5" />
+              )}
             </motion.button>
           </div>
         </motion.div>
