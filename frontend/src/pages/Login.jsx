@@ -1,12 +1,14 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import axiosInstance from "../utils/axiosConfig";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Eye, EyeOff, Loader2, MessageSquare } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogIn, Mail, Lock } from "lucide-react";
+import AuthLayout from "@/components/AuthLayout";
+import { toast } from "sonner";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -22,145 +24,159 @@ const Login = () => {
     setError(false);
 
     try {
-      // console.log(" Attempting login...");
-
       const result = await axiosInstance.post(
         `/api/auth/login`,
         { email, password }
       );
 
-      // console.log(" Login successful:", result.data);
-
       // Store user and token in localStorage
       localStorage.setItem("user", JSON.stringify(result.data.user));
       localStorage.setItem("token", result.data.token);
-      // console.log(" User and token stored in localStorage");
 
       setEmail("");
       setPassword("");
       setLoading(false);
 
+      // Show success toast
+      toast.success("Login successful!", {
+        description: "Welcome back! Redirecting to chat...",
+        duration: 2000,
+      });
+
       // Small delay to ensure localStorage is set before navigation
       setTimeout(() => {
-        // console.log(" Navigating to home...");
-        navigate("/", { replace: true });
-        // Force a page reload to ensure App.jsx re-evaluates auth
-        window.location.href = "/";
+        navigate("/chat", { replace: true });
       }, 100);
-      
+
     } catch (error) {
-      // console.error(" Login error:", error.response?.data);
       setLoading(false);
-      setError(error?.response?.data?.message || "Login failed. Please try again.");
+      setError(false);
+
+      // Show error toast
+      toast.error("Login failed", {
+        description: error?.response?.data?.message || "Please check your credentials and try again.",
+        duration: 4000,
+      });
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-md">
-        {/* Logo/Brand Section */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-cyan-400 to-blue-500 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
-            <MessageSquare className="w-8 h-8 text-white" />
+    <AuthLayout
+      title="Sign in to your account"
+      subtitle="Welcome back! Please enter your details."
+      footerText="Don't have an account?"
+      footerLinkText="Sign up"
+      onFooterLinkClick={() => navigate("/signup")}
+      imagePosition="right"
+    >
+      <form onSubmit={handleLogin} className="space-y-5">
+        {/* Email Input */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.4 }}
+          className="space-y-2"
+        >
+          <Label htmlFor="email" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Mail className="w-4 h-4 text-slate-500" />
+            Email
+          </Label>
+          <Input
+            id="email"
+            type="email"
+            placeholder="amelielaurent7622@gmail.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="h-12 bg-white border border-slate-200 rounded-xl focus:border-primaryColor focus:ring-2 focus:ring-primaryColor/20 transition-all duration-300"
+          />
+        </motion.div>
+
+        {/* Password Input */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.5 }}
+          className="space-y-2"
+        >
+          <Label htmlFor="password" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Lock className="w-4 h-4 text-slate-500" />
+            Password
+          </Label>
+          <div className="relative">
+            <Input
+              id="password"
+              type={show ? "text" : "password"}
+              placeholder="••••••••••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="h-12 pr-12 bg-white border border-slate-200 rounded-xl focus:border-primaryColor focus:ring-2 focus:ring-primaryColor/20 transition-all duration-300"
+            />
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
+              onClick={() => setShow((prev) => !prev)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </motion.button>
           </div>
-          <h1 className="text-3xl font-bold text-slate-800">
-            Welcome to <span className="text-cyan-500">Chatly</span>
-          </h1>
-          <p className="text-slate-500 text-sm mt-2">Sign in to continue to your account</p>
-        </div>
+        </motion.div>
 
-        {/* Login Card */}
-        <Card className="shadow-xl border-slate-200">
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold text-center">Sign In</CardTitle>
-            <CardDescription className="text-center">
-              Enter your credentials to access your account
-            </CardDescription>
-          </CardHeader>
-          
-          <CardContent className="space-y-4">
-            <form onSubmit={handleLogin} className="space-y-4">
-              {/* Email Input */}
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-700">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="h-11 border-slate-300 focus:border-cyan-500 focus:ring-cyan-500"
-                />
-              </div>
+        {/* Error Alert */}
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Alert variant="destructive" className="py-3 rounded-xl">
+              <AlertDescription className="text-sm">{error}</AlertDescription>
+            </Alert>
+          </motion.div>
+        )}
 
-              {/* Password Input */}
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-700">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={show ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="h-11 pr-10 border-slate-300 focus:border-cyan-500 focus:ring-cyan-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShow((prev) => !prev)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 transition-colors"
-                  >
-                    {show ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
+        {/* Login Button */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.6 }}
+        >
+          <Button
+            type="submit"
+            className="w-full h-12 bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white font-medium rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 text-base cursor-pointer"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Signing in...
+              </>
+            ) : (
+              <>
+                <LogIn className="mr-2 h-5 w-5" />
+                Sign In
+              </>
+            )}
+          </Button>
+        </motion.div>
+      </form>
 
-              {/* Error Alert */}
-              {error && (
-                <Alert variant="destructive" className="py-2">
-                  <AlertDescription className="text-sm">{error}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* Login Button */}
-              <Button 
-                type="submit" 
-                className="w-full h-11 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-500 hover:to-blue-600 text-white font-semibold shadow-md"
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
-                  </>
-                ) : (
-                  "Sign In"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-
-          <CardFooter className="flex flex-col space-y-2">
-            <div className="text-sm text-center text-slate-600">
-              Don't have an account?{" "}
-              <button
-                onClick={() => navigate("/signup")}
-                className="text-cyan-500 hover:text-cyan-600 font-semibold hover:underline transition-colors"
-              >
-                Sign Up
-              </button>
-            </div>
-          </CardFooter>
-        </Card>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-slate-500 mt-6">
-          By signing in, you agree to our Terms of Service and Privacy Policy
-        </p>
-      </div>
-    </div>
+      {/* Terms */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, delay: 0.7 }}
+        className="text-xs text-center text-slate-500 mt-8"
+      >
+        By signing in, you agree to our{" "}
+        <button className="text-primaryColor hover:text-darkPurple underline transition-colors cursor-pointer">
+          Terms & Conditions
+        </button>
+      </motion.p>
+    </AuthLayout>
   );
 };
 
