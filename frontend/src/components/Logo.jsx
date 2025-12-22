@@ -1,6 +1,10 @@
 import React from "react";
 
-const Logo = ({ className = "w-10 h-10", showText = false, textClassName = "" }) => {
+const Logo = ({
+  className = "w-10 h-10",
+  showText = false,
+  textClassName = "",
+}) => {
   return (
     <div className="flex items-center gap-2">
       <div className={`relative ${className}`}>
@@ -25,9 +29,7 @@ const Logo = ({ className = "w-10 h-10", showText = false, textClassName = "" })
         </svg>
       </div>
       {showText && (
-        <span className={`font-bold ${textClassName}`}>
-          VibeMesh
-        </span>
+        <span className={`font-bold ${textClassName}`}>VibeMesh</span>
       )}
     </div>
   );

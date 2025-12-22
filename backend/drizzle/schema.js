@@ -64,6 +64,21 @@ export const messagesTable = pgTable("messages", {
   isRead: boolean("is_read").default(false),
 });
 
+// User Contacts table (for "Add for chat" feature)
+// This tracks users that have been explicitly added for chatting
+export const userContactsTable = pgTable("user_contacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: varchar("user_id", { length: 255 })
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  contactUserId: varchar("contact_user_id", { length: 255 })
+    .notNull()
+    .references(() => usersTable.id, { onDelete: "cascade" }),
+  addedForChat: boolean("added_for_chat").default(true), // true = added as contact, false = removed
+  addedAt: timestamp("added_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(usersTable, ({ many }) => ({
   createdGroups: many(groupsTable),
@@ -105,6 +120,18 @@ export const messagesRelations = relations(messagesTable, ({ one }) => ({
   }),
   receiver: one(usersTable, {
     fields: [messagesTable.receiverId],
+    references: [usersTable.id],
+  }),
+}));
+
+// User Contacts relations
+export const userContactsRelations = relations(userContactsTable, ({ one }) => ({
+  user: one(usersTable, {
+    fields: [userContactsTable.userId],
+    references: [usersTable.id],
+  }),
+  contactUser: one(usersTable, {
+    fields: [userContactsTable.contactUserId],
     references: [usersTable.id],
   }),
 }));

@@ -268,6 +268,13 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
     const { groupId } = req.params;
     const { userId } = req.body;
 
+    console.log(`\n👥 [ADD MEMBER] Admin ${req.userId} adding member ${userId} to group ${groupId}`);
+
+    // Validate inputs
+    if (!userId) {
+      return res.status(400).json({ error: "User ID is required" });
+    }
+
     // Check if requester is admin
     const [requesterMembership] = await db
       .select()
@@ -283,17 +290,208 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
       return res.status(403).json({ error: "Only admins can add members" });
     }
 
-    // Add new member
-    await db.insert(groupMembersTable).values({
-      groupId,
-      userId,
-      role: "member",
-    });
+    // Check if user to add exists
+    const [userToAdd] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.id, userId));
 
-    res.status(201).json({ message: "Member added successfully" });
+    if (!userToAdd) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if user is already in group
+    const [existingMembership] = await db
+      .select()
+      .from(groupMembersTable)
+      .where(
+        and(
+          eq(groupMembersTable.groupId, groupId),
+          eq(groupMembersTable.userId, userId)
+        )
+      );
+
+    if (existingMembership) {
+      return res.status(400).json({ error: "User is already a member of this group" });
+    }
+
+    // Add new member
+    const [newMember] = await db
+      .insert(groupMembersTable)
+      .values({
+        groupId,
+        userId,
+        role: "member",
+      })
+      .returning();
+
+    console.log(`✅ [ADD MEMBER] Member added successfully`);
+
+    res.status(201).json({
+      message: "Member added successfully",
+      member: {
+        id: userId,
+        role: "member",
+        joinedAt: newMember.joinedAt
+      }
+    });
   } catch (error) {
     console.error("Error adding member:", error);
     res.status(500).json({ error: "Failed to add member" });
+  }
+});
+
+// Remove member from group (admin only)
+router.delete("/:groupId/members/:userId", authenticateUser, async (req, res) => {
+  try {
+    const { groupId, userId } = req.params;
+
+    console.log(`\n🗑️ [REMOVE MEMBER] Admin ${req.userId} removing member ${userId} from group ${groupId}`);
+
+    // Check if requester is admin
+    const [requesterMembership] = await db
+      .select()
+      .from(groupMembersTable)
+      .where(
+        and(
+          eq(groupMembersTable.groupId, groupId),
+          eq(groupMembersTable.userId, req.userId)
+        )
+      );
+
+    if (!requesterMembership || requesterMembership.role !== "admin") {
+      return res.status(403).json({ error: "Only admins can remove members" });
+    }
+
+    // Cannot remove group creator
+    const [group] = await db
+      .select()
+      .from(groupsTable)
+      .where(eq(groupsTable.id, groupId));
+
+    if (group.createdBy === userId) {
+      return res.status(400).json({ error: "Cannot remove group creator" });
+    }
+
+    // Remove member
+    const [removedMember] = await db
+      .delete(groupMembersTable)
+      .where(
+        and(
+          eq(groupMembersTable.groupId, groupId),
+          eq(groupMembersTable.userId, userId)
+        )
+      )
+      .returning();
+
+    if (!removedMember) {
+      return res.status(404).json({ error: "Member not found in this group" });
+    }
+
+    console.log(`✅ [REMOVE MEMBER] Member removed successfully`);
+
+    res.json({ message: "Member removed successfully" });
+  } catch (error) {
+    console.error("Error removing member:", error);
+    res.status(500).json({ error: "Failed to remove member" });
+  }
+});
+
+// User exits group
+router.post("/:groupId/exit", authenticateUser, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const userId = req.userId;
+
+    console.log(`\n👋 [EXIT GROUP] User ${userId} exiting group ${groupId}`);
+
+    // Check if user is member
+    const [membership] = await db
+      .select()
+      .from(groupMembersTable)
+      .where(
+        and(
+          eq(groupMembersTable.groupId, groupId),
+          eq(groupMembersTable.userId, userId)
+        )
+      );
+
+    if (!membership) {
+      return res.status(404).json({ error: "Not a member of this group" });
+    }
+
+    // Cannot exit if group creator
+    const [group] = await db
+      .select()
+      .from(groupsTable)
+      .where(eq(groupsTable.id, groupId));
+
+    if (group.createdBy === userId) {
+      return res.status(400).json({ error: "Group creator cannot exit. Delete the group instead." });
+    }
+
+    // Remove user from group
+    await db
+      .delete(groupMembersTable)
+      .where(
+        and(
+          eq(groupMembersTable.groupId, groupId),
+          eq(groupMembersTable.userId, userId)
+        )
+      );
+
+    console.log(`✅ [EXIT GROUP] User exited successfully`);
+
+    res.json({ message: "You have exited the group" });
+  } catch (error) {
+    console.error("Error exiting group:", error);
+    res.status(500).json({ error: "Failed to exit group" });
+  }
+});
+
+// Delete group (admin/creator only)
+router.delete("/:groupId", authenticateUser, async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    console.log(`\n🗑️ [DELETE GROUP] User ${req.userId} attempting to delete group ${groupId}`);
+
+    // Check if user is admin/creator
+    const [group] = await db
+      .select()
+      .from(groupsTable)
+      .where(eq(groupsTable.id, groupId));
+
+    if (!group) {
+      return res.status(404).json({ error: "Group not found" });
+    }
+
+    if (group.createdBy !== req.userId) {
+      return res.status(403).json({ error: "Only group creator can delete the group" });
+    }
+
+    // Delete all messages in group
+    await db
+      .delete(messagesTable)
+      .where(eq(messagesTable.groupId, groupId));
+
+    // Delete all members
+    await db
+      .delete(groupMembersTable)
+      .where(eq(groupMembersTable.groupId, groupId));
+
+    // Delete group
+    const [deletedGroup] = await db
+      .delete(groupsTable)
+      .where(eq(groupsTable.id, groupId))
+      .returning();
+
+    console.log(`✅ [DELETE GROUP] Group deleted successfully`);
+
+    res.json({ message: "Group deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting group:", error);
+    res.status(500).json({ error: "Failed to delete group" });
   }
 });
 
