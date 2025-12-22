@@ -9,7 +9,8 @@
     "start": "node index.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:setup": "node setup-db.js"
   },
   "keywords": [],
   "author": "",

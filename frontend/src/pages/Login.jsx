@@ -50,13 +50,14 @@ const Login = () => {
       }, 100);
     } catch (error) {
       setLoading(false);
-      setError(false);
+
+      // Set error message for display
+      const errorMessage = error?.response?.data?.message || "Please check your credentials and try again.";
+      setError(errorMessage);
 
       // Show error toast
       toast.error("Login failed", {
-        description:
-          error?.response?.data?.message ||
-          "Please check your credentials and try again.",
+        description: errorMessage,
         duration: 4000,
       });
     }

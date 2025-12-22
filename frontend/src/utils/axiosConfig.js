@@ -13,8 +13,12 @@ axiosInstance.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 400) {
-      // Token is invalid or not found, clear storage and redirect
+    // Don't redirect on login/signup endpoints - let the component handle the error
+    const isAuthEndpoint = error.config?.url?.includes("/api/auth/login") ||
+                           error.config?.url?.includes("/api/auth/signup");
+
+    if ((error.response?.status === 401 || error.response?.status === 400) && !isAuthEndpoint) {
+      // Token is invalid or not found, clear storage and redirect (except for login/signup)
       console.error("Unauthorized:", error.response?.data?.message);
       localStorage.removeItem("token");
       localStorage.removeItem("user");

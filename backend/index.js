@@ -15,7 +15,7 @@ import userRouter, { setIOMiddleware } from "./routes/user.routes.js";
 import groupRouter from "./routes/group.routes.js";
 import messageRouter from "./routes/message.routes.js";
 
-dotenv.config();
+dotenv.config({path: ".env.production"});
 
 const app = express();
 const server = createServer(app);
@@ -68,16 +68,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// Routes
-app.use("/api/auth", authRouter);
-app.use("/api/user", setIOMiddleware(io), userRouter);
-app.use("/api/groups", groupRouter);
-app.use("/api/messages", messageRouter);
-
 // Store active users: userId -> socket.id
 const activeUsers = new Map();
 // Store socket to user mapping: socket.id -> userId
 const socketToUser = new Map();
+
+// Routes
+app.use("/api/auth", authRouter);
+app.use("/api/user", setIOMiddleware(io, activeUsers), userRouter);
+app.use("/api/groups", groupRouter);
+app.use("/api/messages", messageRouter);
 
 // Socket.io authentication middleware
 io.use((socket, next) => {
@@ -315,9 +315,14 @@ io.on('connection', async (socket) => {
         senderImage: sender.image,
       };
 
-      // Broadcast to all users in the group
-      console.log(`📢 Broadcasting to all users in group: group:${groupId}`);
-      io.to(`group:${groupId}`).emit("receive_group_message", messageData);
+      // Broadcast to all OTHER users in the group (excluding sender)
+      // Sender already has the message from optimistic UI update
+      console.log(`📢 Broadcasting to other users in group: group:${groupId}`);
+      socket.broadcast.to(`group:${groupId}`).emit("receive_group_message", messageData);
+
+      // Confirm to sender that message was sent and saved with full message data
+      // This allows the frontend to replace the optimistic message with the confirmed message
+      socket.emit("message_sent", messageData);
       console.log(`✅ Group message broadcasted successfully\n`);
 
     } catch (error) {
@@ -374,6 +379,74 @@ io.on('connection', async (socket) => {
           });
         }
       });
+    }
+  });
+
+  // Handle explicit user going offline (sent from frontend on tab close)
+  socket.on("user_going_offline", async (data, callback) => {
+    const { userId: requestedUserId, timestamp } = data;
+
+    try {
+      console.log(`\n📵 [USER GOING OFFLINE] Explicit offline notification`);
+      console.log(`   User ID: ${requestedUserId}`);
+      console.log(`   Socket ID: ${socket.id}`);
+      console.log(`   Timestamp: ${timestamp}`);
+      console.log(`   Current active users: ${activeUsers.size}`);
+
+      // Only allow users to mark themselves offline
+      if (requestedUserId !== userId) {
+        console.warn(`   ⚠️  User ${userId} attempted to mark ${requestedUserId} as offline`);
+        if (callback) {
+          callback({
+            success: false,
+            error: "Cannot mark another user offline",
+          });
+        }
+        return;
+      }
+
+      // Remove from active users map
+      activeUsers.delete(userId);
+      socketToUser.delete(socket.id);
+      console.log(`   ✅ User removed from activeUsers map`);
+      console.log(`   Active users after removal: ${activeUsers.size}`);
+
+      // Update user offline status in database
+      try {
+        await db
+          .update(usersTable)
+          .set({ isOnline: false, lastSeen: new Date(timestamp) })
+          .where(eq(usersTable.id, userId));
+
+        console.log(`   ✅ Database updated: user marked as offline with timestamp`);
+      } catch (error) {
+        console.error(`   ❌ Error updating user status in database:`, error.message);
+      }
+
+      // Broadcast user offline status to all clients
+      io.emit("user_status_change", {
+        userId: userId,
+        isOnline: false,
+      });
+
+      console.log(`   📢 Broadcasted user_status_change to all clients\n`);
+
+      // Send acknowledgement back to client
+      if (callback) {
+        callback({
+          success: true,
+          message: "User marked offline successfully",
+          userId: userId,
+        });
+      }
+    } catch (error) {
+      console.error(`   ❌ Error in user_going_offline:`, error.message);
+      if (callback) {
+        callback({
+          success: false,
+          error: error.message,
+        });
+      }
     }
   });
 

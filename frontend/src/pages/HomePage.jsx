@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import useTabSynchronization from "@/hooks/useTabSynchronization";
 import Logo from "@/components/Logo";
 import SplashScreen from "@/components/SplashScreen";
 import LogoIcon from "../../public/chat-logo.svg?react";
@@ -111,6 +112,9 @@ const HomePage = () => {
   const handleResize = () => {
     setIsMobile(window.innerWidth < 640);
   };
+
+  // Initialize tab synchronization (sync logout across tabs)
+  useTabSynchronization();
 
   // Load user data from localStorage
   useEffect(() => {

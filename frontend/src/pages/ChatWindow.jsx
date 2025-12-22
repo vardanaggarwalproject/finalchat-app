@@ -5,6 +5,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../utils/axiosConfig";
 import socket from "../socket";
+import { useOnlineStatusManager, markUserOffline } from "@/hooks/useOnlineStatusManager";
+import useTabSynchronization from "@/hooks/useTabSynchronization";
+import { useProfileSync, useProfileRefreshFallback } from "@/hooks/useProfileSync";
 import Logo from "@/components/Logo";
 import SplashScreen from "@/components/SplashScreen";
 import { Button } from "@/components/ui/button";
@@ -30,6 +33,7 @@ import {
   Video,
   Paperclip,
   Smile,
+  Trash2,
 } from "lucide-react";
 import {
   Dialog,
@@ -50,6 +54,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatTimeAgo } from "@/utils/timeago";
+import AddNewConversationModal from "@/components/AddNewConversationModal";
+import AddGroupMembersModal from "@/components/AddGroupMembersModal";
 
 const ChatWindow = () => {
   const navigate = useNavigate();
@@ -79,6 +85,16 @@ const ChatWindow = () => {
   const [editEmail, setEditEmail] = useState("");
   const [editImage, setEditImage] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  // Add new conversation modal states
+  const [showAddConversationModal, setShowAddConversationModal] = useState(false);
+  const [allUsers, setAllUsers] = useState([]); // All available users (for modal)
+  const [chatUsers, setChatUsers] = useState([]); // Only users with chat history (for main tab)
+
+  // Group management states
+  const [showGroupMembersModal, setShowGroupMembersModal] = useState(false);
+  const [groupMembers, setGroupMembers] = useState([]);
+  const [loadingGroupMembers, setLoadingGroupMembers] = useState(false);
 
   const messagesEndRef = useRef(null);
   const socketInitialized = useRef(false);
@@ -112,6 +128,94 @@ const ChatWindow = () => {
 
     initializeUser();
   }, [navigate]);
+
+  // Initialize tab synchronization (sync logout/login across tabs)
+  useTabSynchronization();
+
+  // Initialize profile synchronization (sync profile updates across users)
+  useProfileSync(setUsers, setSelectedUser, currentUser);
+
+  // Initialize profile refresh fallback (ensures profiles stay fresh)
+  useProfileRefreshFallback(currentUser);
+
+  // Listen for real-time profile updates (including current user's own updates)
+  useEffect(() => {
+    const handleProfileUpdate = (data) => {
+      console.log("🔄 [CHATWINDOW] Received profile_updated event");
+      console.log(`   Event data:`, data);
+      console.log(`   Updated user ID: ${data.userId}`);
+      console.log(`   Current user ID: ${currentUserRef.current?.id}`);
+      console.log(`   Data user object:`, data.user);
+
+      if (!data || !data.userId || !data.user) {
+        console.error("❌ Invalid profile update data received:", data);
+        return;
+      }
+
+      // If it's the current user's profile that was updated, update their state immediately
+      if (data.userId === currentUserRef.current?.id) {
+        console.log("👤 [CHATWINDOW] Profile update is for CURRENT USER - updating state");
+        console.log(`   Old name: ${currentUserRef.current?.name || currentUserRef.current?.userName}`);
+        console.log(`   New name: ${data.user.name || data.user.userName}`);
+        console.log(`   New image: ${data.user.image ? "provided" : "unchanged"}`);
+        console.log(`   Full new user object:`, data.user);
+
+        // Merge the new data with existing user to preserve any fields not in the update
+        const mergedUser = {
+          ...currentUserRef.current,
+          ...data.user,
+        };
+
+        console.log(`   Merged user object:`, mergedUser);
+
+        // Update current user in main state
+        setCurrentUser(mergedUser);
+
+        // Also update localStorage to keep it in sync
+        localStorage.setItem("user", JSON.stringify(mergedUser));
+        console.log("✅ [CHATWINDOW] Current user state and localStorage updated");
+        console.log(`   State after update:`, mergedUser);
+      } else {
+        console.log("👥 [CHATWINDOW] Profile update is for ANOTHER USER - updating their info");
+
+        // Update the user in both users and allUsers lists
+        setUsers((prevUsers) =>
+          prevUsers.map((u) =>
+            u.id === data.userId ? { ...u, ...data.user } : u
+          )
+        );
+
+        setAllUsers((prevAllUsers) =>
+          prevAllUsers.map((u) =>
+            u.id === data.userId ? { ...u, ...data.user } : u
+          )
+        );
+
+        // Also update selectedUser if they're viewing this user
+        if (selectedUserRef.current?.id === data.userId) {
+          setSelectedUser((prevSelected) => ({
+            ...prevSelected,
+            ...data.user,
+          }));
+        }
+
+        console.log("✅ [CHATWINDOW] Updated user profile in all lists");
+      }
+    };
+
+    if (!socket) return;
+
+    console.log("✅ [CHATWINDOW] Setting up profile update listener for current user");
+    socket.on("profile_updated", handleProfileUpdate);
+
+    return () => {
+      console.log("🧹 [CHATWINDOW] Removing profile update listener");
+      socket.off("profile_updated", handleProfileUpdate);
+    };
+  }, []);
+
+  // Initialize online status manager
+  useOnlineStatusManager(currentUser?.id, currentUser);
 
   // Initialize socket connection AFTER user is set
   useEffect(() => {
@@ -179,7 +283,9 @@ const ChatWindow = () => {
             u.id === onlineUser.id ? { ...u, isOnline: true } : u
           );
         }
-        return [...prevUsers, { ...onlineUser, isOnline: true }];
+        // Don't add new user unless they have chat history or are added as contacts
+        // Only update online status of users already in the list
+        return prevUsers;
       });
 
       // Update selectedUser if they came online
@@ -265,16 +371,44 @@ const ChatWindow = () => {
         console.log(" Current users in state before update:", prevUsers.length);
 
         // Check if sender exists in users list
-        const senderExists = prevUsers.some(
+        const senderExists = prevUsers.find(
           (u) => u.id === messageData.senderId
         );
-        console.log(" Sender exists in users list:", senderExists);
+        console.log(" Sender exists in users list:", !!senderExists);
 
         if (!senderExists) {
           console.log(
-            " SENDER NOT IN LIST! This might be the issue. Users list:",
-            prevUsers.map((u) => ({ id: u.id, name: u.userName }))
+            " Sender NOT in list - adding them because they sent a message"
           );
+          // User sent a message, so add them to the chat list with hasChat = true
+          const newUser = {
+            id: messageData.senderId,
+            userName: messageData.senderUserName,
+            name: messageData.senderName,
+            email: messageData.senderEmail || "",
+            hasChat: true,
+            addedForChat: false,
+            lastMessage: {
+              content: messageData.content,
+              createdAt: messageData.createdAt,
+              senderId: messageData.senderId,
+            },
+            unreadCount: 1,
+            isOnline: true,
+          };
+
+          // Also update allUsers so modal filtering is correct
+          setAllUsers((prevAllUsers) => {
+            const exists = prevAllUsers.find((u) => u.id === messageData.senderId);
+            if (exists) {
+              return prevAllUsers.map((u) =>
+                u.id === messageData.senderId ? { ...u, hasChat: true } : u
+              );
+            }
+            return [newUser, ...prevAllUsers];
+          });
+
+          return [newUser, ...prevUsers];
         }
 
         const updated = prevUsers.map((u) => {
@@ -307,36 +441,63 @@ const ChatWindow = () => {
     // Listen for message sent confirmation (for sender's UI update)
     socket.on("message_sent", (messageData) => {
       console.log(" Message sent confirmation:", messageData);
-      console.log(
-        " Receiver ID:",
-        messageData.receiverId,
-        "Content:",
-        messageData.content
-      );
 
-      // Update user list to show the message in the receiver's entry
-      setUsers((prevUsers) => {
-        console.log(
-          " Updating sender's user list, total users:",
-          prevUsers.length
-        );
-        const updated = prevUsers.map((u) => {
-          if (u.id === messageData.receiverId) {
-            console.log(" Found receiver in users list, updating lastMessage");
-            return {
-              ...u,
-              lastMessage: {
-                content: messageData.content,
-                createdAt: messageData.createdAt,
-                senderId: messageData.senderId,
-              },
-            };
-          }
-          return u;
+      if (messageData.receiverId) {
+        // Direct message - update user list to show last message
+        console.log(" Receiver ID:", messageData.receiverId, "Content:", messageData.content);
+
+        setUsers((prevUsers) => {
+          console.log(" Updating sender's user list, total users:", prevUsers.length);
+          const updated = prevUsers.map((u) => {
+            if (u.id === messageData.receiverId) {
+              console.log(" Found receiver in users list, updating lastMessage");
+              return {
+                ...u,
+                lastMessage: {
+                  content: messageData.content,
+                  createdAt: messageData.createdAt,
+                  senderId: messageData.senderId,
+                },
+              };
+            }
+            return u;
+          });
+          console.log(" Updated users list after message_sent:", updated);
+          return updated;
         });
-        console.log(" Updated users list after message_sent:", updated);
-        return updated;
-      });
+      } else if (messageData.groupId && selectedGroupRef.current?.id === messageData.groupId) {
+        // Group message - add confirmed message to chat
+        console.log(" Group message confirmed. Adding message to chat");
+
+        setMessages((prevMessages) => {
+          // Check if message already exists to prevent duplicates
+          const exists = prevMessages.some((msg) => msg.id === messageData.id);
+          if (exists) {
+            console.log(" Message already in chat, skipping:", messageData.id);
+            return prevMessages;
+          }
+
+          console.log(" Adding confirmed group message:", messageData.id);
+          return [...prevMessages, messageData];
+        });
+
+        // Update group last message
+        setGroups((prevGroups) =>
+          prevGroups.map((g) => {
+            if (g.id === messageData.groupId) {
+              return {
+                ...g,
+                lastMessage: {
+                  content: messageData.content,
+                  createdAt: messageData.createdAt,
+                  senderName: messageData.senderUserName || messageData.senderName,
+                },
+              };
+            }
+            return g;
+          })
+        );
+      }
     });
 
     // Listen for group messages
@@ -348,7 +509,16 @@ const ChatWindow = () => {
         selectedGroupRef.current &&
         messageData.groupId === selectedGroupRef.current.id
       ) {
-        setMessages((prevMessages) => [...prevMessages, messageData]);
+        setMessages((prevMessages) => {
+          // Check if message already exists to prevent duplicates
+          const exists = prevMessages.some((msg) => msg.id === messageData.id);
+          if (exists) {
+            console.log(" Message already in chat, skipping:", messageData.id);
+            return prevMessages;
+          }
+          console.log(" Adding received group message:", messageData.id);
+          return [...prevMessages, messageData];
+        });
       }
 
       // Update group list with new last message
@@ -400,57 +570,58 @@ const ChatWindow = () => {
       });
     });
 
+    // Listen for member added to group
+    socket.on("member_added_to_group", (data) => {
+      console.log(" Member added to group:", data);
+      // Refresh group members if the current group is open
+      if (selectedGroupRef.current?.id === data.groupId) {
+        fetchGroupMembers(data.groupId);
+      }
+    });
+
+    // Listen for member removed from group
+    socket.on("member_removed_from_group", (data) => {
+      console.log(" Member removed from group:", data);
+      // Refresh group members if the current group is open
+      if (selectedGroupRef.current?.id === data.groupId) {
+        fetchGroupMembers(data.groupId);
+      }
+    });
+
+    // Listen for user exiting group
+    socket.on("user_exited_group", (data) => {
+      console.log(" User exited group:", data);
+      // Remove group from list if current user exits
+      if (data.userId === currentUserRef.current?.id) {
+        setGroups((prev) => prev.filter((g) => g.id !== data.groupId));
+        setFilteredGroups((prev) => prev.filter((g) => g.id !== data.groupId));
+      }
+      // Refresh group members if viewing
+      if (selectedGroupRef.current?.id === data.groupId) {
+        fetchGroupMembers(data.groupId);
+      }
+    });
+
+    // Listen for group deleted
+    socket.on("group_deleted", (data) => {
+      console.log(" Group deleted:", data);
+      setGroups((prev) => prev.filter((g) => g.id !== data.groupId));
+      setFilteredGroups((prev) => prev.filter((g) => g.id !== data.groupId));
+      // Deselect group if it's currently selected
+      if (selectedGroupRef.current?.id === data.groupId) {
+        setSelectedGroup(null);
+        setSelectedUser(null);
+      }
+    });
+
     socket.on("message_error", (error) => {
       console.error(" Message error:", error);
       alert("Failed to send message: " + error.error);
     });
 
-    // Listen for profile updates from server (broadcasts to all connected clients)
-    socket.on("profile_updated", (data) => {
-      console.log(" Profile updated from server:", data);
-      console.log(
-        " Current user ID:",
-        currentUserRef.current?.id,
-        "Updated user ID:",
-        data.userId
-      );
-
-      // If it's the current user's profile that was updated
-      if (data.userId === currentUserRef.current?.id) {
-        console.log(
-          " Updating CURRENT user profile in state and localStorage:",
-          data.user
-        );
-        setCurrentUser(data.user);
-        localStorage.setItem("user", JSON.stringify(data.user));
-        console.log(" Current user updated in localStorage");
-      } else {
-        console.log(" Updating OTHER user profile in users list");
-      }
-
-      // Update the user in the users list if they exist
-      setUsers((prevUsers) => {
-        const updated = prevUsers.map((u) => {
-          if (u.id === data.userId) {
-            console.log(
-              " Updating user in list:",
-              data.userId,
-              "with new data:",
-              data.user
-            );
-            return { ...u, ...data.user };
-          }
-          return u;
-        });
-        return updated;
-      });
-
-      // Update the selected user if it's the one being viewed
-      if (selectedUserRef.current?.id === data.userId) {
-        console.log(" Updating selected user:", data.userId);
-        setSelectedUser((prevSelected) => ({ ...prevSelected, ...data.user }));
-      }
-    });
+    // Note: profile_updated listener is now handled by useProfileSync hook
+    // Keeping this comment to document that it was moved
+    // The hook provides better organization and logging
 
     return () => {
       console.log(" Cleaning up socket listeners");
@@ -463,6 +634,10 @@ const ChatWindow = () => {
       socket.off("receive_group_message");
       socket.off("group_created");
       socket.off("added_to_group");
+      socket.off("member_added_to_group");
+      socket.off("member_removed_from_group");
+      socket.off("user_exited_group");
+      socket.off("group_deleted");
       socket.off("message_sent");
       socket.off("message_error");
       socket.off("profile_updated");
@@ -546,8 +721,38 @@ const ChatWindow = () => {
           })
         );
 
-        setUsers(usersWithMessages);
-        setFilteredUsers(usersWithMessages);
+        console.log(" 📊 [USERS FETCH] All users with properties:");
+        usersWithMessages.forEach(u => {
+          console.log(`   - ${u.name || u.userName} (id: ${u.id}, hasChat: ${u.hasChat}, addedForChat: ${u.addedForChat})`);
+        });
+
+        // Separate users based on hasChat and addedForChat properties
+        const usersWithChatHistory = usersWithMessages.filter(u => u.hasChat);
+        const usersAddedAsContacts = usersWithMessages.filter(u => u.addedForChat);
+        const usersWithChatOrAdded = usersWithMessages.filter(u => u.hasChat || u.addedForChat);
+        const usersNotInteracted = usersWithMessages.filter(u => !u.hasChat && !u.addedForChat);
+
+        console.log(` 💬 [USERS FETCH] Users with chat history: ${usersWithChatHistory.length}`);
+        usersWithChatHistory.forEach(u => console.log(`   - ${u.name || u.userName}`));
+
+        console.log(` 👥 [USERS FETCH] Users added as contacts: ${usersAddedAsContacts.length}`);
+        usersAddedAsContacts.forEach(u => console.log(`   - ${u.name || u.userName}`));
+
+        console.log(` 📋 [USERS FETCH] Users to show on main tab (chat + contacts): ${usersWithChatOrAdded.length}`);
+        usersWithChatOrAdded.forEach(u => console.log(`   - ${u.name || u.userName}`));
+
+        console.log(` 🆕 [USERS FETCH] Users available for modal (new): ${usersNotInteracted.length}`);
+        usersNotInteracted.forEach(u => console.log(`   - ${u.name || u.userName}`));
+
+        // Store all users for the modal
+        setAllUsers(usersWithMessages);
+
+        // Store users with chat history OR added as contacts for main Users tab
+        setUsers(usersWithChatOrAdded);
+        setFilteredUsers(usersWithChatOrAdded);
+
+        // Also update chatUsers for modal reference
+        setChatUsers(usersWithChatOrAdded);
       } catch (error) {
         console.error("❌ Error fetching users:", error);
       }
@@ -792,18 +997,8 @@ const ChatWindow = () => {
           content: messageContent,
         });
 
-        // Optimistically add message to UI
-        const tempMessage = {
-          id: Date.now().toString(),
-          senderId: currentUser.id,
-          groupId: selectedGroup.id,
-          content: messageContent,
-          createdAt: new Date().toISOString(),
-          senderName: currentUser.name,
-          senderUserName: currentUser.userName,
-        };
-
-        setMessages((prev) => [...prev, tempMessage]);
+        // DON'T add optimistic message for groups - wait for server confirmation
+        // This prevents duplicate message issues
       } else if (selectedUser) {
         console.log("Sending direct message:", {
           receiverId: selectedUser.id,
@@ -902,49 +1097,60 @@ const ChatWindow = () => {
     setUpdatingProfile(true);
 
     try {
-      // console.log(" Sending profile update to server...");
+      console.log(" 📤 [UPDATE PROFILE] Sending profile update to server...");
+      console.log(`   Name: ${editName}`);
+      console.log(`   Email: ${editEmail}`);
+      console.log(`   Image: ${editImage ? "provided" : "unchanged"}`);
+
       const response = await axiosInstance.put(`/api/user/update`, {
         name: editName,
         email: editEmail,
         image: editImage,
       });
 
-      // console.log(" Profile updated from server:", response.data);
+      console.log(" ✅ [UPDATE PROFILE] Profile updated from server:", response.data);
 
       // Update current user with fresh data
       const updatedUser = response.data.user;
-      // console.log(" Updated user object:", updatedUser);
-      // console.log(" Current user ID:", currentUser?.id);
+      console.log(" 🔄 [UPDATE PROFILE] Updated user object from response:", updatedUser);
+      console.log(" 📊 [UPDATE PROFILE] Current user ID:", currentUser?.id);
+      console.log(" 📊 [UPDATE PROFILE] Updated user ID:", updatedUser?.id);
 
       // Update state and localStorage immediately
+      console.log(" 💾 [UPDATE PROFILE] Updating currentUser state...");
       setCurrentUser(updatedUser);
       localStorage.setItem("user", JSON.stringify(updatedUser));
-      // console.log(" Updated user saved to localStorage");
+      console.log(" ✅ [UPDATE PROFILE] Updated user saved to localStorage");
+      console.log(" 📋 [UPDATE PROFILE] New localStorage value:", JSON.parse(localStorage.getItem("user")));
 
       // Update users list immediately (don't wait for socket event)
+      console.log(" 👥 [UPDATE PROFILE] Updating users list...");
       setUsers((prevUsers) =>
         prevUsers.map((u) =>
           u.id === updatedUser.id ? { ...u, ...updatedUser } : u
         )
       );
-      // console.log(" Users list updated with new profile data");
+      console.log(" ✅ [UPDATE PROFILE] Users list updated with new profile data");
 
       // Update selected user if it's the one being viewed
       if (selectedUser?.id === updatedUser.id) {
+        console.log(" 🎯 [UPDATE PROFILE] Updating selected user (being viewed)...");
         setSelectedUser(updatedUser);
-        // console.log("Selected user updated with new profile data");
+        console.log(" ✅ [UPDATE PROFILE] Selected user updated with new profile data");
       }
 
       // Force a re-render by updating edit fields too
+      console.log(" 📝 [UPDATE PROFILE] Updating edit fields for form...");
       setEditName(updatedUser.name || updatedUser.userName || "");
       setEditEmail(updatedUser.email || "");
       setEditImage(updatedUser.image || "");
 
       setShowEditProfile(false);
-      // console.log(" Profile dialog closed - waiting for socket broadcast");
+      console.log(" 🎉 [UPDATE PROFILE] Profile dialog closed - profile fully updated!");
       alert("Profile updated successfully!");
     } catch (error) {
-      // console.error(" Error updating profile:", error);
+      console.error(" ❌ [UPDATE PROFILE] Error updating profile:", error);
+      console.error(" 📋 [UPDATE PROFILE] Error response:", error.response?.data);
       alert(
         "Failed to update profile: " +
           (error.response?.data?.message || error.message)
@@ -963,9 +1169,220 @@ const ChatWindow = () => {
     );
   };
 
+  // Handle adding a new conversation
+  const handleAddNewConversation = async (user) => {
+    console.log("📝 [ADD CONVERSATION] User selected for conversation:", user.name || user.userName);
+    console.log("   User ID:", user.id);
+
+    try {
+      // Call API to add user as contact
+      console.log("📤 [ADD CONVERSATION] Calling API to add user as contact...");
+      const response = await axiosInstance.post(`/api/user/contacts/add`, {
+        contactUserId: user.id,
+      });
+
+      console.log("✅ [ADD CONVERSATION] User added as contact successfully:", response.data);
+
+      // Add the user to the chat list with addedForChat flag
+      const userWithFlag = {
+        ...user,
+        addedForChat: true,
+      };
+
+      const userExists = chatUsers.some((u) => u.id === user.id);
+      if (!userExists) {
+        console.log("✅ [ADD CONVERSATION] Adding user to chat list");
+        setChatUsers((prev) => [userWithFlag, ...prev]);
+        setUsers((prev) => [userWithFlag, ...prev]);
+        setFilteredUsers((prev) => [userWithFlag, ...prev]);
+
+        // Also update allUsers to mark this user as addedForChat
+        setAllUsers((prev) =>
+          prev.map((u) =>
+            u.id === user.id ? { ...u, addedForChat: true } : u
+          )
+        );
+      }
+
+      // Select the user to open the chat
+      console.log("💬 [ADD CONVERSATION] Opening chat with user");
+      setSelectedUser(userWithFlag);
+      setSelectedGroup(null);
+    } catch (error) {
+      console.error("❌ [ADD CONVERSATION] Error adding user as contact:", error);
+      alert(
+        "Failed to add user: " +
+          (error.response?.data?.message || error.message)
+      );
+    }
+  };
+
+  // Fetch group members
+  const fetchGroupMembers = async (groupId) => {
+    try {
+      console.log(`🔍 [GROUP] Fetching members for group ${groupId}`);
+      setLoadingGroupMembers(true);
+      const response = await axiosInstance.get(`/api/groups/${groupId}`);
+      console.log(`✅ [GROUP] Members fetched:`, response.data.members);
+      setGroupMembers(response.data.members);
+    } catch (error) {
+      console.error(`❌ [GROUP] Error fetching members:`, error);
+      alert("Failed to fetch group members");
+    } finally {
+      setLoadingGroupMembers(false);
+    }
+  };
+
+  // Open group members modal
+  const handleOpenGroupMembersModal = async (group) => {
+    console.log(`👥 [GROUP] Opening members modal for group: ${group.name}`);
+    await fetchGroupMembers(group.id);
+    setShowGroupMembersModal(true);
+  };
+
+  // Add member to group
+  const handleAddGroupMember = async (user) => {
+    if (!selectedGroup) return;
+
+    try {
+      console.log(`👤 [GROUP] Adding member ${user.name} to group ${selectedGroup.id}`);
+      await axiosInstance.post(`/api/groups/${selectedGroup.id}/members`, {
+        userId: user.id,
+      });
+      console.log(`✅ [GROUP] Member added successfully`);
+
+      // Refresh group members list
+      await fetchGroupMembers(selectedGroup.id);
+
+      // Emit socket event for real-time update
+      if (socket.connected) {
+        socket.emit("member_added_to_group", {
+          groupId: selectedGroup.id,
+          userId: user.id,
+          user: user,
+        });
+      }
+    } catch (error) {
+      console.error(`❌ [GROUP] Error adding member:`, error);
+      alert(
+        "Failed to add member: " +
+          (error.response?.data?.message || error.message)
+      );
+    }
+  };
+
+  // Remove member from group
+  const handleRemoveGroupMember = async (userId) => {
+    if (!selectedGroup) return;
+
+    try {
+      console.log(`🗑️ [GROUP] Removing member ${userId} from group ${selectedGroup.id}`);
+      await axiosInstance.delete(`/api/groups/${selectedGroup.id}/members/${userId}`);
+      console.log(`✅ [GROUP] Member removed successfully`);
+
+      // Refresh group members list
+      await fetchGroupMembers(selectedGroup.id);
+
+      // Emit socket event for real-time update
+      if (socket.connected) {
+        socket.emit("member_removed_from_group", {
+          groupId: selectedGroup.id,
+          userId: userId,
+        });
+      }
+    } catch (error) {
+      console.error(`❌ [GROUP] Error removing member:`, error);
+      alert(
+        "Failed to remove member: " +
+          (error.response?.data?.message || error.message)
+      );
+    }
+  };
+
+  // Exit group
+  const handleExitGroup = async (groupId) => {
+    if (!confirm("Are you sure you want to exit this group?")) return;
+
+    try {
+      console.log(`👋 [GROUP] User exiting group ${groupId}`);
+      await axiosInstance.post(`/api/groups/${groupId}/exit`);
+      console.log(`✅ [GROUP] Exited group successfully`);
+
+      // Remove group from list
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setFilteredGroups((prev) => prev.filter((g) => g.id !== groupId));
+
+      // Deselect group if it's currently selected
+      if (selectedGroup?.id === groupId) {
+        setSelectedGroup(null);
+        setSelectedUser(null);
+      }
+
+      // Emit socket event
+      if (socket.connected) {
+        socket.emit("user_exited_group", {
+          groupId: groupId,
+          userId: currentUser.id,
+        });
+      }
+
+      alert("You have exited the group");
+    } catch (error) {
+      console.error(`❌ [GROUP] Error exiting group:`, error);
+      alert(
+        "Failed to exit group: " +
+          (error.response?.data?.message || error.message)
+      );
+    }
+  };
+
+  // Delete group
+  const handleDeleteGroup = async (groupId) => {
+    if (!confirm("Are you sure you want to delete this group? This action cannot be undone.")) return;
+
+    try {
+      console.log(`🗑️ [GROUP] Admin deleting group ${groupId}`);
+      await axiosInstance.delete(`/api/groups/${groupId}`);
+      console.log(`✅ [GROUP] Group deleted successfully`);
+
+      // Remove group from list
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setFilteredGroups((prev) => prev.filter((g) => g.id !== groupId));
+
+      // Deselect group
+      if (selectedGroup?.id === groupId) {
+        setSelectedGroup(null);
+        setSelectedUser(null);
+      }
+
+      // Emit socket event
+      if (socket.connected) {
+        socket.emit("group_deleted", {
+          groupId: groupId,
+        });
+      }
+
+      alert("Group deleted successfully");
+    } catch (error) {
+      console.error(`❌ [GROUP] Error deleting group:`, error);
+      alert(
+        "Failed to delete group: " +
+          (error.response?.data?.message || error.message)
+      );
+    }
+  };
+
   // Logout
   const handleLogout = async () => {
     try {
+      // First mark user as offline if socket is connected
+      if (socket.connected && currentUser?.id) {
+        socket.emit("user_going_offline", {
+          userId: currentUser.id,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
       await axiosInstance.get(`/api/auth/logout`);
       localStorage.removeItem("user");
       localStorage.removeItem("token");
@@ -1058,7 +1475,7 @@ const ChatWindow = () => {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="font-semibold text-slate-800 truncate text-sm">
-                          {currentUser?.userName || currentUser?.name}
+                          {currentUser?.name || currentUser?.userName}
                         </p>
                         <Circle
                           className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -1100,16 +1517,29 @@ const ChatWindow = () => {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="p-4 border-b border-slate-200 flex-shrink-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search conversations..."
-              className="pl-10 bg-slate-50 border-slate-200 focus:border-darkPurple focus:ring-darkPurple"
-            />
+        {/* Search Bar with Add Button */}
+        <div className="p-4 border-b border-slate-200 flex-shrink-0 space-y-3">
+          <div className="flex items-center gap-2">
+            {/* Search Input */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value.trim())}
+                placeholder="Search conversations..."
+                className="pl-10 bg-slate-50 border-slate-200 focus:border-darkPurple focus:ring-darkPurple"
+              />
+            </div>
+
+            {/* Add New Conversation Button */}
+            <Button
+              size="icon"
+              onClick={() => setShowAddConversationModal(true)}
+              className="bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white shadow-lg hover:shadow-xl transition-all duration-300 h-10 w-10 flex-shrink-0"
+              title="Start a new conversation"
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
           </div>
         </div>
 
@@ -1156,7 +1586,7 @@ const ChatWindow = () => {
                         setSelectedUser(user);
                         setSelectedGroup(null);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
+                      className={`w-full flex items-center gap-2 px-2 sm:px-4 py-3 transition-colors overflow-hidden ${
                         selectedUser?.id === user.id && !selectedGroup
                           ? "bg-gradient-to-r from-primaryColor/10 to-secondaryColor/10 border-l-4 border-[#040316]"
                           : "hover:bg-slate-50 border-l-4 border-transparent"
@@ -1191,16 +1621,16 @@ const ChatWindow = () => {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-1 w-full min-w-0">
                           {user.lastMessage ? (
-                            <p className="text-xs text-slate-600 break-words flex-1 line-clamp-1">
+                            <p className="text-xs text-slate-600 flex-1 line-clamp-1 overflow-hidden text-ellipsis min-w-0 break-all">
                               {user.lastMessage.senderId === currentUser.id
                                 ? "You: "
                                 : ""}
-                              {truncateMessage(user.lastMessage.content, 50)}
+                              {truncateMessage(user.lastMessage.content, 25)}
                             </p>
                           ) : (
-                            <p className="text-xs text-slate-400 italic">
+                            <p className="text-xs text-slate-400 italic flex-shrink-0">
                               No messages yet
                             </p>
                           )}
@@ -1265,7 +1695,7 @@ const ChatWindow = () => {
                         setSelectedGroup(group);
                         setSelectedUser(null);
                       }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
+                      className={`w-full flex items-center gap-2 px-2 sm:px-4 py-3 transition-colors overflow-hidden ${
                         selectedGroup?.id === group.id && !selectedUser
                           ? "bg-gradient-to-r from-primaryColor/10 to-secondaryColor/10 border-l-4 border-[#040316]"
                           : "hover:bg-slate-50 border-l-4 border-transparent"
@@ -1290,14 +1720,14 @@ const ChatWindow = () => {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-1 w-full min-w-0">
                           {group.lastMessage ? (
-                            <p className="text-xs text-slate-600 break-words flex-1 line-clamp-1">
+                            <p className="text-xs text-slate-600 flex-1 line-clamp-1 overflow-hidden text-ellipsis min-w-0 break-all">
                               {group.lastMessage.senderName}:{" "}
-                              {truncateMessage(group.lastMessage.content, 40)}
+                              {truncateMessage(group.lastMessage.content, 15)}
                             </p>
                           ) : (
-                            <p className="text-xs text-slate-400 italic">
+                            <p className="text-xs text-slate-400 italic flex-shrink-0">
                               No messages yet
                             </p>
                           )}
@@ -1373,9 +1803,14 @@ const ChatWindow = () => {
                       {selectedGroup && (
                         <Hash className="w-3 h-3 sm:w-4 sm:h-4 text-darkPurple flex-shrink-0 mt-0.5" />
                       )}
-                      <p className="font-semibold text-slate-800 text-sm sm:text-base break-words">
-                        {selectedChat.userName || selectedChat.name}
-                      </p>
+                      <button
+                        onClick={() => selectedGroup && handleOpenGroupMembersModal(selectedGroup)}
+                        className={`font-semibold text-slate-800 text-sm sm:text-base break-words ${
+                          selectedGroup ? "hover:text-darkPurple cursor-pointer transition-colors" : ""
+                        }`}
+                      >
+                        {selectedChat.name || selectedChat.userName}
+                      </button>
                     </div>
                     <p className="text-xs sm:text-sm flex items-center gap-1">
                       {selectedUser ? (
@@ -1420,13 +1855,67 @@ const ChatWindow = () => {
                   >
                     <Video className="w-4 h-4 sm:w-5 sm:h-5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10"
-                  >
-                    <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
-                  </Button>
+
+                  {/* Group Options Menu */}
+                  {selectedGroup && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10"
+                        >
+                          <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56 rounded-xl shadow-lg border border-slate-200">
+                        {/* View/Manage Members */}
+                        <DropdownMenuItem
+                          onClick={() => handleOpenGroupMembersModal(selectedGroup)}
+                          className="cursor-pointer hover:bg-slate-100 rounded-lg py-2.5 px-3 mx-1"
+                        >
+                          <Users className="w-4 h-4 mr-3 text-darkPurple" />
+                          <span className="font-medium text-slate-700">Manage Members</span>
+                        </DropdownMenuItem>
+
+                        <DropdownMenuSeparator className="my-1" />
+
+                        {/* Exit Group - All members */}
+                        <DropdownMenuItem
+                          onClick={() => handleExitGroup(selectedGroup.id)}
+                          className="cursor-pointer hover:bg-orange-50 rounded-lg py-2.5 px-3 mx-1"
+                        >
+                          <LogOut className="w-4 h-4 mr-3 text-orange-500" />
+                          <span className="font-medium text-slate-700">Exit Group</span>
+                        </DropdownMenuItem>
+
+                        {/* Delete Group - Admin only */}
+                        {selectedGroup.role === "admin" && (
+                          <>
+                            <DropdownMenuSeparator className="my-1" />
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteGroup(selectedGroup.id)}
+                              className="cursor-pointer hover:bg-red-50 rounded-lg py-2.5 px-3 mx-1"
+                            >
+                              <Trash2 className="w-4 h-4 mr-3 text-red-500" />
+                              <span className="font-medium text-red-600">Delete Group</span>
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+
+                  {/* User Options - Placeholder */}
+                  {selectedUser && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-slate-600 hover:text-darkPurple h-9 w-9 sm:h-10 sm:w-10"
+                    >
+                      <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </div>
@@ -1451,7 +1940,7 @@ const ChatWindow = () => {
                         }`}
                       >
                         <div
-                          className={`max-w-[85%] xs:max-w-[80%] sm:max-w-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
+                          className={`w-auto max-w-[90%] xs:max-w-[85%] sm:max-w-md px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl break-inside-avoid ${
                             isOwn
                               ? "bg-gradient-to-r from-primaryColor/50 via-secondaryColor/50 to-lightPurple/50 text-slate-800 rounded-br-sm shadow-md border border-primaryColor/30"
                               : "bg-gradient-to-r from-[#040316] to-[#1a1a2e] text-white rounded-bl-sm shadow-lg"
@@ -1468,7 +1957,7 @@ const ChatWindow = () => {
                               {msg.senderUserName || msg.senderName}
                             </p>
                           )}
-                          <p className="text-xs max-w-full sm:text-sm wrap-break-words break-all">
+                          <p className="text-xs max-w-full sm:text-sm break-all overflow-hidden whitespace-pre-wrap">
                             {msg.content}
                           </p>
                           <p
@@ -1721,7 +2210,11 @@ const ChatWindow = () => {
                 onChange={(e) => setEditEmail(e.target.value)}
                 placeholder="Enter your email"
                 className="h-11 focus:border-darkPurple focus:ring-darkPurple"
+                title="Please enter a valid email address"
               />
+              {editEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail) && (
+                <p className="text-xs text-red-500">Please enter a valid email address</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="editImage">
@@ -1747,8 +2240,11 @@ const ChatWindow = () => {
               </Button>
               <Button
                 type="submit"
-                disabled={updatingProfile}
-                className="bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
+                disabled={
+                  updatingProfile ||
+                  (editEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editEmail))
+                }
+                className="bg-gradient-to-r from-[#040316] to-[#1a1a2e] hover:from-[#1a1a2e] hover:to-[#040316] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {updatingProfile ? (
                   <>
@@ -1763,6 +2259,28 @@ const ChatWindow = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Add New Conversation Modal */}
+      <AddNewConversationModal
+        isOpen={showAddConversationModal}
+        onOpenChange={setShowAddConversationModal}
+        allUsers={allUsers}
+        chatUsers={chatUsers}
+        onUserSelect={handleAddNewConversation}
+        isLoading={loading}
+      />
+
+      {/* Group Members Modal */}
+      <AddGroupMembersModal
+        isOpen={showGroupMembersModal}
+        onOpenChange={setShowGroupMembersModal}
+        allUsers={users}
+        groupMembers={groupMembers}
+        onAddMember={handleAddGroupMember}
+        onRemoveMember={handleRemoveGroupMember}
+        isAdmin={selectedGroup?.role === "admin"}
+        isLoading={loadingGroupMembers}
+      />
     </div>
   );
 };
