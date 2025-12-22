@@ -26,7 +26,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
   : ["http://localhost:5173", "http://localhost:3000", "https://chat-application-gqrk4hwr2-vardans-projects-378735dd.vercel.app"];
 
-console.log("✅ CORS Allowed Origins:", allowedOrigins);
+// console.log("✅ CORS Allowed Origins:", allowedOrigins);
 
 app.use(
   cors({
@@ -39,7 +39,7 @@ app.use(
         callback(null, true);
       } else {
         // In development, log but don't block
-        console.warn(`⚠️ CORS request from unauthorized origin: ${origin}`);
+        // console.warn(`⚠️ CORS request from unauthorized origin: ${origin}`);
         // Allow it anyway for development (remove this check in production)
         callback(null, true);
       }
@@ -55,7 +55,7 @@ const io = new Server(server, {
       if (allowedOrigins.includes(origin) || allowedOrigins.includes("*")) {
         callback(null, true);
       } else {
-        console.warn(`⚠️ Socket.io CORS request from: ${origin}`);
+        // console.warn(`⚠️ Socket.io CORS request from: ${origin}`);
         callback(null, true); // Allow for development
       }
     },
@@ -99,18 +99,18 @@ io.use((socket, next) => {
 io.on('connection', async (socket) => {
   const userId = socket.userId;
 
-  console.log(`\n✅ [CONNECTION] User connected`);
-  console.log(`   User ID: ${userId}`);
-  console.log(`   Socket ID: ${socket.id}`);
-  console.log(`   Total active users before: ${activeUsers.size}`);
+  // console.log(`\n✅ [CONNECTION] User connected`);
+  // console.log(`   User ID: ${userId}`);
+  // console.log(`   Socket ID: ${socket.id}`);
+  // console.log(`   Total active users before: ${activeUsers.size}`);
 
   // Store active user
   activeUsers.set(userId, socket.id);
   socketToUser.set(socket.id, userId);
 
-  console.log(`   ✅ User registered in activeUsers map`);
-  console.log(`   Total active users after: ${activeUsers.size}`);
-  console.log(`   Active Users: ${Array.from(activeUsers.entries()).map(([uid, sid]) => `${uid}→${sid.substring(0, 8)}...`).join(", ")}`);
+  // console.log(`   ✅ User registered in activeUsers map`);
+  // console.log(`   Total active users after: ${activeUsers.size}`);
+  // console.log(`   Active Users: ${Array.from(activeUsers.entries()).map(([uid, sid]) => `${uid}→${sid.substring(0, 8)}...`).join(", ")}`);
 
   // Update user online status in database
   try {
@@ -119,9 +119,9 @@ io.on('connection', async (socket) => {
       .set({ isOnline: true, lastSeen: new Date() })
       .where(eq(usersTable.id, userId));
 
-    console.log(`   ✅ Database updated: user marked as online`);
+    // console.log(`   ✅ Database updated: user marked as online`);
   } catch (error) {
-    console.error(`   ❌ Error updating user status:`, error.message);
+    console.error(` Error updating user status:`, error.message);
   }
 
   // Broadcast user online status to all connected clients
@@ -130,11 +130,11 @@ io.on('connection', async (socket) => {
     isOnline: true,
   });
 
-  console.log(`   📢 Broadcasted user_status_change to all clients`);
+  // console.log(`   📢 Broadcasted user_status_change to all clients`);
 
   // Join user to their personal room
   socket.join(`user:${userId}`);
-  console.log(`   ✅ User joined room: user:${userId}\n`);
+  // console.log(`   ✅ User joined room: user:${userId}\n`);
 
   // Get user info and emit to all clients
   try {
@@ -182,8 +182,8 @@ io.on('connection', async (socket) => {
     const { receiverId, content } = data;
 
     try {
-      console.log(`\n📤 [DIRECT MESSAGE] Sender: ${userId}, Receiver: ${receiverId}`);
-      console.log(`   Content: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
+      // console.log(`\n📤 [DIRECT MESSAGE] Sender: ${userId}, Receiver: ${receiverId}`);
+      // console.log(`   Content: "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`);
 
       // Validate inputs
       if (!receiverId || !content || !content.trim()) {
