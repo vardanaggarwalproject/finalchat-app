@@ -1,6 +1,6 @@
 import { db } from "../config/db.js";
 import { usersTable, messagesTable, userContactsTable } from "../drizzle/schema.js";
-import { eq, and, or, desc, ne } from "drizzle-orm";
+import { eq, and, or, desc, ne, isNull } from "drizzle-orm";
 
 export const getCurrentUser = async (req, res) => {
   try {
@@ -61,6 +61,8 @@ export const getAllUsers = async (req, res) => {
       isOnline: activeUsers && activeUsers.has(user.id), // True if user is in activeUsers map, false otherwise
     }));
 
+    console.log(` [GET_ALL_USERS] Total other users found in DB: ${users.length}`);
+
     // Get last message with each user AND check if they're added as contacts
     const usersWithLastMessage = await Promise.all(
       usersWithRealtimeStatus.map(async (user) => {
@@ -83,7 +85,7 @@ export const getAllUsers = async (req, res) => {
                   eq(messagesTable.receiverId, currentUserId)
                 )
               ),
-              eq(messagesTable.groupId, null)
+              isNull(messagesTable.groupId)
             )
           )
           .orderBy(desc(messagesTable.createdAt))
@@ -98,7 +100,7 @@ export const getAllUsers = async (req, res) => {
               eq(messagesTable.senderId, user.id),
               eq(messagesTable.receiverId, currentUserId),
               eq(messagesTable.isRead, false),
-              eq(messagesTable.groupId, null)
+              isNull(messagesTable.groupId)
             )
           );
 
@@ -134,6 +136,11 @@ export const getAllUsers = async (req, res) => {
         };
       })
     );
+
+    console.log(` [GET_ALL_USERS] Returning ${usersWithLastMessage.length} users with properties:`);
+    usersWithLastMessage.forEach(u => {
+      console.log(`   - ${u.userName}: hasChat=${u.hasChat}, addedForChat=${u.addedForChat}, unread=${u.unreadCount}`);
+    });
 
     res.status(200).json({ users: usersWithLastMessage });
   } catch (error) {

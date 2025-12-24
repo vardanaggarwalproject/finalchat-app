@@ -115,7 +115,7 @@ router.post("/create", authenticateUser, async (req, res) => {
 // Get user's groups
 router.get("/my-groups", authenticateUser, async (req, res) => {
   try {
-    const groups = await db
+    const userGroups = await db
       .select({
         id: groupsTable.id,
         name: groupsTable.name,
@@ -127,7 +127,32 @@ router.get("/my-groups", authenticateUser, async (req, res) => {
       .innerJoin(groupsTable, eq(groupMembersTable.groupId, groupsTable.id))
       .where(eq(groupMembersTable.userId, req.userId));
 
-    res.json({ groups });
+    // Get last message for each group
+    const groupsWithLastMessage = await Promise.all(
+      userGroups.map(async (group) => {
+        const [lastMessage] = await db
+          .select({
+            content: messagesTable.content,
+            createdAt: messagesTable.createdAt,
+            senderId: messagesTable.senderId,
+            senderName: usersTable.name,
+            senderUserName: usersTable.userName,
+          })
+          .from(messagesTable)
+          .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
+          .where(eq(messagesTable.groupId, group.id))
+          .orderBy(desc(messagesTable.createdAt))
+          .limit(1);
+
+        return {
+          ...group,
+          lastMessage: lastMessage || null,
+          unreadCount: 0, // Placeholder for now - group unread is per-user tracking
+        };
+      })
+    );
+
+    res.json({ groups: groupsWithLastMessage });
   } catch (error) {
     console.error("Error fetching groups:", error);
     res.status(500).json({ error: "Failed to fetch groups" });

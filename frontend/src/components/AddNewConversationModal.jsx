@@ -42,8 +42,8 @@ const AddNewConversationModal = ({
     console.log(`   allUsers:`, allUsers.map(u => ({ id: u.id, name: u.name, hasChat: u.hasChat, addedForChat: u.addedForChat })));
     console.log(`   chatUsers:`, chatUsers.map(u => ({ id: u.id, name: u.name, hasChat: u.hasChat, addedForChat: u.addedForChat })));
 
-    const chatUserIds = new Set(chatUsers.map((u) => u.id));
-    const available = allUsers.filter((user) => !chatUserIds.has(user.id));
+    const chatUserIds = new Set(chatUsers.map((u) => String(u.id)));
+    const available = allUsers.filter((user) => !chatUserIds.has(String(user.id)));
 
     console.log(`   Available users after filter: ${available.length}`);
     console.log(`   Available:`, available.map(u => ({ id: u.id, name: u.name })));

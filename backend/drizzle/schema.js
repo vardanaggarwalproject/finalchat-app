@@ -10,7 +10,7 @@ import { relations } from "drizzle-orm";
 
 // Users table
 export const usersTable = pgTable("users", {
-  id: varchar("id", { length: 255 }).primaryKey(),
+  id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 255 }),
   userName: varchar("user_name", { length: 255 }).notNull().unique(),
   email: varchar("email", { length: 255 }).notNull().unique(),
@@ -28,7 +28,7 @@ export const groupsTable = pgTable("groups", {
   name: text("name").notNull(),
   description: text("description"),
   isPrivate: boolean("is_private").default(false),
-  createdBy: varchar("created_by", { length: 255 })
+  createdBy: uuid("created_by")
     .notNull()
     .references(() => usersTable.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -41,7 +41,7 @@ export const groupMembersTable = pgTable("group_members", {
   groupId: uuid("group_id")
     .notNull()
     .references(() => groupsTable.id, { onDelete: "cascade" }),
-  userId: varchar("user_id", { length: 255 })
+  userId: uuid("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   role: text("role").default("member"), // 'admin' or 'member'
@@ -52,10 +52,10 @@ export const groupMembersTable = pgTable("group_members", {
 export const messagesTable = pgTable("messages", {
   id: uuid("id").primaryKey().defaultRandom(),
   groupId: uuid("group_id").references(() => groupsTable.id, { onDelete: "cascade" }),
-  senderId: varchar("sender_id", { length: 255 })
+  senderId: uuid("sender_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  receiverId: varchar("receiver_id", { length: 255 })
+  receiverId: uuid("receiver_id")
     .references(() => usersTable.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
   messageType: text("message_type").default("text"), // 'text', 'image', 'file'
@@ -68,10 +68,10 @@ export const messagesTable = pgTable("messages", {
 // This tracks users that have been explicitly added for chatting
 export const userContactsTable = pgTable("user_contacts", {
   id: uuid("id").primaryKey().defaultRandom(),
-  userId: varchar("user_id", { length: 255 })
+  userId: uuid("user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
-  contactUserId: varchar("contact_user_id", { length: 255 })
+  contactUserId: uuid("contact_user_id")
     .notNull()
     .references(() => usersTable.id, { onDelete: "cascade" }),
   addedForChat: boolean("added_for_chat").default(true), // true = added as contact, false = removed

@@ -1,7 +1,7 @@
 CREATE TABLE "group_members" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"group_id" uuid NOT NULL,
-	"user_id" varchar(255) NOT NULL,
+	"user_id" uuid NOT NULL,
 	"role" text DEFAULT 'member',
 	"joined_at" timestamp DEFAULT now()
 );
@@ -11,7 +11,7 @@ CREATE TABLE "groups" (
 	"name" text NOT NULL,
 	"description" text,
 	"is_private" boolean DEFAULT false,
-	"created_by" varchar(255) NOT NULL,
+	"created_by" uuid NOT NULL,
 	"created_at" timestamp DEFAULT now(),
 	"updated_at" timestamp DEFAULT now()
 );
@@ -19,8 +19,8 @@ CREATE TABLE "groups" (
 CREATE TABLE "messages" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"group_id" uuid,
-	"sender_id" varchar(255) NOT NULL,
-	"receiver_id" varchar(255),
+	"sender_id" uuid NOT NULL,
+	"receiver_id" uuid,
 	"content" text NOT NULL,
 	"message_type" text DEFAULT 'text',
 	"created_at" timestamp DEFAULT now(),
@@ -29,7 +29,7 @@ CREATE TABLE "messages" (
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
-	"id" varchar(255) PRIMARY KEY NOT NULL,
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" varchar(255),
 	"user_name" varchar(255) NOT NULL,
 	"email" varchar(255) NOT NULL,

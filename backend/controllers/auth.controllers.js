@@ -72,6 +72,9 @@ export const signUp = async (req, res) => {
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = newUser;
 
+    // Store new user in response for middleware to broadcast
+    res.locals.newUser = userWithoutPassword;
+
     res.status(201).json({
       message: "User created successfully",
       user: userWithoutPassword,

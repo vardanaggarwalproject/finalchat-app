@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-console */
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef,useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../utils/axiosConfig";
 import socket from "../socket";
@@ -13,6 +13,7 @@ import SplashScreen from "@/components/SplashScreen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   MessageSquare,
@@ -57,6 +58,31 @@ import { formatTimeAgo } from "@/utils/timeago";
 import AddNewConversationModal from "@/components/AddNewConversationModal";
 import AddGroupMembersModal from "@/components/AddGroupMembersModal";
 
+const UserSkeleton = () => (
+  <div className="w-full flex items-center gap-3 px-4 py-3 border-l-4 border-transparent">
+    <Skeleton className="w-12 h-12 rounded-full" />
+    <div className="flex-1 space-y-2">
+      <div className="flex justify-between">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-3 w-12" />
+      </div>
+      <Skeleton className="h-3 w-32" />
+    </div>
+  </div>
+);
+
+const MessageSkeleton = ({ side }) => (
+  <div className={`flex ${side === 'left' ? 'justify-start' : 'justify-end'} mb-4 px-4`}>
+    <div className={`flex ${side === 'left' ? 'flex-row' : 'flex-row-reverse'} items-end gap-2 max-w-[80%]`}>
+      <Skeleton className="w-8 h-8 rounded-full flex-shrink-0" />
+      <div className={`flex flex-col ${side === 'left' ? 'items-start' : 'items-end'} space-y-1`}>
+        <Skeleton className={`h-16 w-32 md:w-64 rounded-2xl ${side === 'left' ? 'rounded-bl-none' : 'rounded-br-none'}`} />
+        <Skeleton className="h-3 w-12" />
+      </div>
+    </div>
+  </div>
+);
+
 const ChatWindow = () => {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState(null);
@@ -70,6 +96,8 @@ const ChatWindow = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingGroups, setLoadingGroups] = useState(true);
   const [sending, setSending] = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -95,12 +123,84 @@ const ChatWindow = () => {
   const [showGroupMembersModal, setShowGroupMembersModal] = useState(false);
   const [groupMembers, setGroupMembers] = useState([]);
   const [loadingGroupMembers, setLoadingGroupMembers] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState(null);
 
   const messagesEndRef = useRef(null);
   const socketInitialized = useRef(false);
   const selectedUserRef = useRef(null);
   const selectedGroupRef = useRef(null);
   const currentUserRef = useRef(null);
+
+  // Helper to update and sort user/group lists for sidebar
+  const refreshSidebar = useCallback(() => {
+    const sortFn = (a, b) => {
+      const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 
+                    (a.lastMessage?.created_at ? new Date(a.lastMessage.created_at).getTime() : 0);
+      const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 
+                    (b.lastMessage?.created_at ? new Date(b.lastMessage.created_at).getTime() : 0);
+      return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
+    };
+    setUsers(prev => [...prev].sort(sortFn));
+    setGroups(prev => [...prev].sort(sortFn));
+  }, []);
+
+  // Fetch all users logic
+  const fetchUsers = useCallback(async (user) => {
+    const activeUser = user || currentUserRef.current;
+    if (!activeUser) {
+      console.log(" [FETCH USERS] No user available, skipping");
+      return;
+    }
+
+    try {
+      console.log(" [FETCH USERS] Fetching users for:", activeUser.id);
+      const response = await axiosInstance.get(`/api/user/all`);
+      
+      let otherUsers = response.data.users.filter(
+        (u) => String(u.id) !== String(activeUser.id)
+      );
+
+      // Backend already provides unreadCount, so we can use the response directly
+      // This is more reliable than tracking it in frontend state during a full fetch
+      const usersToShow = otherUsers.filter(u => {
+        const show = u.hasChat || u.addedForChat;
+        if (!show) console.log(`   - User ignored: ${u.userName} (hasChat=${u.hasChat}, addedForChat=${u.addedForChat})`);
+        return show;
+      });
+      
+      console.log(` 📋 [USERS FETCH] Found ${usersToShow.length} users to show out of ${otherUsers.length}`);
+      setUsers(usersToShow);
+      setFilteredUsers(usersToShow);
+      setAllUsers(otherUsers);
+      setLoadingUsers(false);
+    } catch (error) {
+      console.error("❌ Error fetching users:", error);
+      setLoadingUsers(false);
+    }
+  }, []); // No longer depends on users
+
+  // Fetch groups logic
+  const fetchGroups = useCallback(async (user) => {
+    const activeUser = user || currentUserRef.current;
+    if (!activeUser) {
+      console.log(" [FETCH GROUPS] No user available, skipping");
+      return;
+    }
+
+    try {
+      console.log(" [FETCH GROUPS] Fetching groups...");
+      const response = await axiosInstance.get(`/api/groups/my-groups`);
+      const groupsData = response.data.groups || [];
+      
+      setGroups(groupsData);
+      setFilteredGroups(groupsData);
+      setLoadingGroups(false);
+    } catch (error) {
+      console.error(" Error fetching groups:", error);
+      setLoadingGroups(false);
+    }
+  }, []);
 
   // Initialize user first
   useEffect(() => {
@@ -137,6 +237,19 @@ const ChatWindow = () => {
 
   // Initialize profile refresh fallback (ensures profiles stay fresh)
   useProfileRefreshFallback(currentUser);
+
+  // Sync refs with state to ensure socket listeners have most current data
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  useEffect(() => {
+    selectedGroupRef.current = selectedGroup;
+  }, [selectedGroup]);
 
   // Listen for real-time profile updates (including current user's own updates)
   useEffect(() => {
@@ -203,14 +316,45 @@ const ChatWindow = () => {
       }
     };
 
+    const handleUserCreated = (data) => {
+      console.log("🆕 [CHATWINDOW] Received user_created event");
+      console.log(`   Event data:`, data);
+
+      if (!data || !data.user) {
+        console.error("❌ Invalid user created data received:", data);
+        return;
+      }
+
+      const newUser = data.user;
+
+      // Don't add if it's the current user (shouldn't happen but good to be safe)
+      if (newUser.id === currentUserRef.current?.id) {
+        return;
+      }
+
+      setAllUsers((prevAllUsers) => {
+        // Check if user already exists to prevent duplicates
+        const exists = prevAllUsers.some((u) => u.id === newUser.id);
+        if (exists) {
+          console.log(`   User ${newUser.userName} already in allUsers list, skipping`);
+          return prevAllUsers;
+        }
+
+        console.log(`   ➕ Adding new user ${newUser.userName} to allUsers list`);
+        return [...prevAllUsers, { ...newUser, hasChat: false, addedForChat: false }];
+      });
+    };
+
     if (!socket) return;
 
     console.log("✅ [CHATWINDOW] Setting up profile update listener for current user");
     socket.on("profile_updated", handleProfileUpdate);
+    socket.on("user_created", handleUserCreated);
 
     return () => {
       console.log("🧹 [CHATWINDOW] Removing profile update listener");
       socket.off("profile_updated", handleProfileUpdate);
+      socket.off("user_created", handleUserCreated);
     };
   }, []);
 
@@ -241,26 +385,13 @@ const ChatWindow = () => {
       console.log(" Socket connected successfully:", socket.id);
       setSocketConnected(true);
 
-      // Refresh user list to get current online status when socket connects
-      const refreshUserStatus = async () => {
-        try {
-          console.log(" Refreshing user list after socket connection...");
-          const response = await axiosInstance.get(`/api/user/all`);
-
-          if (currentUserRef.current) {
-            const otherUsers = response.data.users.filter(
-              (user) => user.id !== currentUserRef.current.id
-            );
-            setUsers(otherUsers);
-            setFilteredUsers(otherUsers);
-            console.log(" User list refreshed with current online status");
-          }
-        } catch (error) {
-          console.error(" Error refreshing user list:", error);
-        }
-      };
-
-      refreshUserStatus();
+      // Refresh data when bucket reconnects to ensure we have latest state
+      // Pass the current user explicitly
+      const activeUser = currentUserRef.current;
+      if (activeUser) {
+        fetchUsers(activeUser);
+        fetchGroups(activeUser);
+      }
     });
 
     socket.on("connect_error", (error) => {
@@ -288,6 +419,13 @@ const ChatWindow = () => {
         return prevUsers;
       });
 
+      // Update allUsers to sync status in "Start New Conversation" modal
+      setAllUsers((prevAllUsers) =>
+        prevAllUsers.map((u) =>
+          u.id === onlineUser.id ? { ...u, isOnline: true } : u
+        )
+      );
+
       // Update selectedUser if they came online
       if (selectedUserRef.current?.id === onlineUser.id) {
         setSelectedUser((prevSelected) => ({
@@ -304,6 +442,11 @@ const ChatWindow = () => {
       );
       setUsers((prevUsers) =>
         prevUsers.map((u) => (u.id === userId ? { ...u, isOnline } : u))
+      );
+
+      // Update allUsers to sync status in "Start New Conversation" modal
+      setAllUsers((prevAllUsers) =>
+        prevAllUsers.map((u) => (u.id === userId ? { ...u, isOnline } : u))
       );
 
       // Update selectedUser if their status changed
@@ -335,20 +478,30 @@ const ChatWindow = () => {
       ) {
         // Check if message is between current user and the selected user
         const isMessageForThisChat =
-          (messageData.senderId === selectedUserRef.current.id &&
-            messageData.receiverId === currentUserRef.current.id) ||
-          (messageData.senderId === currentUserRef.current.id &&
-            messageData.receiverId === selectedUserRef.current.id) ||
-          (messageData.senderId === selectedUserRef.current.id &&
+          (String(messageData.senderId) === String(selectedUserRef.current.id) &&
+            String(messageData.receiverId) === String(currentUserRef.current.id)) ||
+          (String(messageData.senderId) === String(currentUserRef.current.id) &&
+            String(messageData.receiverId) === String(selectedUserRef.current.id)) ||
+          (String(messageData.senderId) === String(selectedUserRef.current.id) &&
             !messageData.receiverId) || // Old format compatibility
-          (messageData.receiverId === selectedUserRef.current.id &&
+          (String(messageData.receiverId) === String(selectedUserRef.current.id) &&
             !messageData.groupId); // Old format compatibility
 
         if (isMessageForThisChat) {
           console.log(
             " Adding message to chat - Valid for current conversation"
           );
-          setMessages((prevMessages) => [...prevMessages, messageData]);
+          // Standardize message object to match our UI expectations
+          const formattedMessage = {
+            ...messageData,
+            id: messageData.id || `msg-${Date.now()}`,
+            senderId: messageData.senderId,
+            content: messageData.content,
+            createdAt: messageData.createdAt || new Date().toISOString(),
+            senderName: messageData.senderName,
+            senderUserName: messageData.senderUserName
+          };
+          setMessages((prevMessages) => [...prevMessages, formattedMessage]);
         } else {
           console.log(
             " Message not for this chat - Sender:",
@@ -371,70 +524,56 @@ const ChatWindow = () => {
         console.log(" Current users in state before update:", prevUsers.length);
 
         // Check if sender exists in users list
+        const normalizedSenderId = String(messageData.senderId).toLowerCase().trim();
         const senderExists = prevUsers.find(
-          (u) => u.id === messageData.senderId
+          (u) => String(u.id).toLowerCase().trim() === normalizedSenderId
         );
         console.log(" Sender exists in users list:", !!senderExists);
 
         if (!senderExists) {
-          console.log(
-            " Sender NOT in list - adding them because they sent a message"
-          );
-          // User sent a message, so add them to the chat list with hasChat = true
+          console.log(` Sender ${normalizedSenderId} NOT in list - adding them.`);
           const newUser = {
             id: messageData.senderId,
-            userName: messageData.senderUserName,
-            name: messageData.senderName,
+            userName: messageData.senderUserName || "Unknown",
+            name: messageData.senderName || messageData.senderUserName || "Unknown User",
             email: messageData.senderEmail || "",
             hasChat: true,
             addedForChat: false,
             lastMessage: {
-              content: messageData.content,
-              createdAt: messageData.createdAt,
+              content: messageData.content || messageData.text || "",
+              createdAt: messageData.createdAt || messageData.created_at || new Date().toISOString(),
               senderId: messageData.senderId,
             },
             unreadCount: 1,
             isOnline: true,
           };
-
-          // Also update allUsers so modal filtering is correct
-          setAllUsers((prevAllUsers) => {
-            const exists = prevAllUsers.find((u) => u.id === messageData.senderId);
-            if (exists) {
-              return prevAllUsers.map((u) =>
-                u.id === messageData.senderId ? { ...u, hasChat: true } : u
-              );
-            }
-            return [newUser, ...prevAllUsers];
+          return [newUser, ...prevUsers].sort((a, b) => {
+            const timeA = (a.lastMessage?.createdAt || a.lastMessage?.created_at) ? new Date(a.lastMessage.createdAt || a.lastMessage.created_at).getTime() : 0;
+            const timeB = (b.lastMessage?.createdAt || b.lastMessage?.created_at) ? new Date(b.lastMessage.createdAt || b.lastMessage.created_at).getTime() : 0;
+            return timeB - timeA;
           });
-
-          return [newUser, ...prevUsers];
         }
 
-        const updated = prevUsers.map((u) => {
-          if (u.id === messageData.senderId) {
-            console.log(" Found sender in users list, updating lastMessage:", {
-              content: messageData.content,
-              createdAt: messageData.createdAt,
-              senderId: messageData.senderId,
-            });
+        return prevUsers.map((u) => {
+          if (String(u.id).toLowerCase().trim() === normalizedSenderId) {
+            const isCurrentlySelected = selectedUserRef.current && String(selectedUserRef.current.id).toLowerCase().trim() === normalizedSenderId;
             return {
               ...u,
+              hasChat: true,
               lastMessage: {
-                content: messageData.content,
-                createdAt: messageData.createdAt,
+                content: messageData.content || messageData.text || "",
+                createdAt: messageData.createdAt || messageData.created_at || new Date().toISOString(),
                 senderId: messageData.senderId,
               },
-              unreadCount:
-                selectedUserRef.current?.id === messageData.senderId
-                  ? u.unreadCount
-                  : (u.unreadCount || 0) + 1,
+              unreadCount: isCurrentlySelected ? 0 : (u.unreadCount || 0) + 1,
             };
           }
           return u;
+        }).sort((a, b) => {
+          const timeA = (a.lastMessage?.createdAt || a.lastMessage?.created_at) ? new Date(a.lastMessage.createdAt || a.lastMessage.created_at).getTime() : 0;
+          const timeB = (b.lastMessage?.createdAt || b.lastMessage?.created_at) ? new Date(b.lastMessage.createdAt || b.lastMessage.created_at).getTime() : 0;
+          return timeB - timeA;
         });
-        console.log(" Updated users list:", updated);
-        return updated;
       });
     });
 
@@ -448,24 +587,30 @@ const ChatWindow = () => {
 
         setUsers((prevUsers) => {
           console.log(" Updating sender's user list, total users:", prevUsers.length);
+          const normalizedReceiverId = String(messageData.receiverId).toLowerCase().trim();
           const updated = prevUsers.map((u) => {
-            if (u.id === messageData.receiverId) {
+            if (String(u.id).toLowerCase().trim() === normalizedReceiverId) {
               console.log(" Found receiver in users list, updating lastMessage");
               return {
                 ...u,
+                hasChat: true,
                 lastMessage: {
-                  content: messageData.content,
-                  createdAt: messageData.createdAt,
-                  senderId: messageData.senderId,
+                  content: messageData.content || messageData.text || "",
+                  createdAt: messageData.createdAt || messageData.created_at || new Date().toISOString(),
+                  senderId: String(messageData.senderId),
                 },
               };
             }
             return u;
           });
           console.log(" Updated users list after message_sent:", updated);
-          return updated;
+          return updated.sort((a, b) => {
+            const timeA = (a.lastMessage?.createdAt || a.lastMessage?.created_at) ? new Date(a.lastMessage.createdAt || a.lastMessage.created_at).getTime() : 0;
+            const timeB = (b.lastMessage?.createdAt || b.lastMessage?.created_at) ? new Date(b.lastMessage.createdAt || b.lastMessage.created_at).getTime() : 0;
+            return timeB - timeA;
+          });
         });
-      } else if (messageData.groupId && selectedGroupRef.current?.id === messageData.groupId) {
+      } else if (messageData.groupId) {
         // Group message - add confirmed message to chat
         console.log(" Group message confirmed. Adding message to chat");
 
@@ -481,7 +626,6 @@ const ChatWindow = () => {
           return [...prevMessages, messageData];
         });
 
-        // Update group last message
         setGroups((prevGroups) =>
           prevGroups.map((g) => {
             if (g.id === messageData.groupId) {
@@ -489,26 +633,29 @@ const ChatWindow = () => {
                 ...g,
                 lastMessage: {
                   content: messageData.content,
-                  createdAt: messageData.createdAt,
+                  createdAt: messageData.createdAt || new Date().toISOString(),
                   senderName: messageData.senderUserName || messageData.senderName,
                 },
               };
             }
             return g;
+          }).sort((a, b) => {
+            const timeA = a.lastMessage?.createdAt ? new Date(a.lastMessage.createdAt).getTime() : 0;
+            const timeB = b.lastMessage?.createdAt ? new Date(b.lastMessage.createdAt).getTime() : 0;
+            return (isNaN(timeB) ? 0 : timeB) - (isNaN(timeA) ? 0 : timeA);
           })
         );
       }
     });
 
-    // Listen for group messages
+    // Listen for new group messages - Enhanced for unread counts
     socket.on("receive_group_message", (messageData) => {
       console.log(" Received group message:", messageData);
 
       // Add message to chat if it's in the currently selected group
-      if (
-        selectedGroupRef.current &&
-        messageData.groupId === selectedGroupRef.current.id
-      ) {
+      const isActiveGroup = selectedGroupRef.current && messageData.groupId === selectedGroupRef.current.id;
+      
+      if (isActiveGroup) {
         setMessages((prevMessages) => {
           // Check if message already exists to prevent duplicates
           const exists = prevMessages.some((msg) => msg.id === messageData.id);
@@ -521,21 +668,27 @@ const ChatWindow = () => {
         });
       }
 
-      // Update group list with new last message
+      // Update group list with new last message and UNREAD COUNT
       setGroups((prevGroups) =>
         prevGroups.map((g) => {
-          if (g.id === messageData.groupId) {
+          if (String(g.id) === String(messageData.groupId)) {
+            const isDifferentUser = String(messageData.senderId) !== String(currentUserRef.current?.id);
             return {
               ...g,
               lastMessage: {
-                content: messageData.content,
-                createdAt: messageData.createdAt,
+                content: messageData.content || messageData.text || "",
+                createdAt: messageData.createdAt || messageData.created_at || new Date().toISOString(),
                 senderName:
                   messageData.senderUserName || messageData.senderName,
               },
+              unreadCount: isActiveGroup ? 0 : (isDifferentUser ? (g.unreadCount || 0) + 1 : g.unreadCount)
             };
           }
           return g;
+        }).sort((a, b) => {
+          const timeA = (a.lastMessage?.createdAt || a.lastMessage?.created_at) ? new Date(a.lastMessage.createdAt || a.lastMessage.created_at).getTime() : 0;
+          const timeB = (b.lastMessage?.createdAt || b.lastMessage?.created_at) ? new Date(b.lastMessage.createdAt || b.lastMessage.created_at).getTime() : 0;
+          return timeB - timeA;
         })
       );
     });
@@ -674,155 +827,25 @@ const ChatWindow = () => {
     return () => clearInterval(intervalId);
   }, []);
 
-  // Fetch all users AFTER socket is connected
+  // Initial fetch and on currentUser change
   useEffect(() => {
-    const fetchUsers = async () => {
-      if (!currentUser) return;
+    if (currentUser) {
+      console.log(" Initial population of users and groups for:", currentUser.id);
+      fetchUsers(currentUser);
+      fetchGroups(currentUser);
+    }
+  }, [currentUser, fetchUsers, fetchGroups]);
 
-      try {
-        console.log(" Fetching users...");
-        const response = await axiosInstance.get(`/api/user/all`);
-
-        console.log(" Fetched users:", response.data);
-
-        // Filter out current user
-        let otherUsers = response.data.users.filter(
-          (user) => user.id !== currentUser.id
-        );
-
-        // Fetch last message for each user in parallel
-        const usersWithMessages = await Promise.all(
-          otherUsers.map(async (user) => {
-            try {
-              const messagesResponse = await axiosInstance.get(
-                `/api/messages/direct/${user.id}`
-              );
-              const messages = messagesResponse.data.messages || [];
-
-              if (messages.length > 0) {
-                const lastMsg = messages[messages.length - 1];
-                return {
-                  ...user,
-                  lastMessage: {
-                    content: lastMsg.content,
-                    createdAt: lastMsg.createdAt,
-                    senderId: lastMsg.senderId,
-                  },
-                };
-              }
-              return user;
-            } catch (error) {
-              console.error(
-                `Error fetching messages for user ${user.id}:`,
-                error
-              );
-              return user;
-            }
-          })
-        );
-
-        console.log(" 📊 [USERS FETCH] All users with properties:");
-        usersWithMessages.forEach(u => {
-          console.log(`   - ${u.name || u.userName} (id: ${u.id}, hasChat: ${u.hasChat}, addedForChat: ${u.addedForChat})`);
-        });
-
-        // Separate users based on hasChat and addedForChat properties
-        const usersWithChatHistory = usersWithMessages.filter(u => u.hasChat);
-        const usersAddedAsContacts = usersWithMessages.filter(u => u.addedForChat);
-        const usersWithChatOrAdded = usersWithMessages.filter(u => u.hasChat || u.addedForChat);
-        const usersNotInteracted = usersWithMessages.filter(u => !u.hasChat && !u.addedForChat);
-
-        console.log(` 💬 [USERS FETCH] Users with chat history: ${usersWithChatHistory.length}`);
-        usersWithChatHistory.forEach(u => console.log(`   - ${u.name || u.userName}`));
-
-        console.log(` 👥 [USERS FETCH] Users added as contacts: ${usersAddedAsContacts.length}`);
-        usersAddedAsContacts.forEach(u => console.log(`   - ${u.name || u.userName}`));
-
-        console.log(` 📋 [USERS FETCH] Users to show on main tab (chat + contacts): ${usersWithChatOrAdded.length}`);
-        usersWithChatOrAdded.forEach(u => console.log(`   - ${u.name || u.userName}`));
-
-        console.log(` 🆕 [USERS FETCH] Users available for modal (new): ${usersNotInteracted.length}`);
-        usersNotInteracted.forEach(u => console.log(`   - ${u.name || u.userName}`));
-
-        // Store all users for the modal
-        setAllUsers(usersWithMessages);
-
-        // Store users with chat history OR added as contacts for main Users tab
-        setUsers(usersWithChatOrAdded);
-        setFilteredUsers(usersWithChatOrAdded);
-
-        // Also update chatUsers for modal reference
-        setChatUsers(usersWithChatOrAdded);
-      } catch (error) {
-        console.error("❌ Error fetching users:", error);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      fetchUsers();
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [currentUser]);
-
-  // Fetch groups
+  // Final loading state coordination to prevent flickering
   useEffect(() => {
-    const fetchGroups = async () => {
-      if (!currentUser) return;
-
-      try {
-        console.log(" Fetching groups...");
-        const response = await axiosInstance.get(`/api/groups/my-groups`);
-
-        console.log(" Fetched groups:", response.data);
-        let allGroups = response.data.groups || [];
-
-        // Fetch last message for each group in parallel
-        const groupsWithMessages = await Promise.all(
-          allGroups.map(async (group) => {
-            try {
-              const messagesResponse = await axiosInstance.get(
-                `/api/groups/${group.id}/messages`
-              );
-              const messages = messagesResponse.data.messages || [];
-
-              if (messages.length > 0) {
-                const lastMsg = messages[messages.length - 1];
-                return {
-                  ...group,
-                  lastMessage: {
-                    content: lastMsg.content,
-                    createdAt: lastMsg.createdAt,
-                    senderName: lastMsg.senderUserName || lastMsg.senderName,
-                  },
-                };
-              }
-              return group;
-            } catch (error) {
-              console.error(
-                `Error fetching messages for group ${group.id}:`,
-                error
-              );
-              return group;
-            }
-          })
-        );
-
-        setGroups(groupsWithMessages);
-        setFilteredGroups(groupsWithMessages);
+    if (!loadingUsers && !loadingGroups) {
+      // Small delay to ensure state updates have propagated to UI
+      const timer = setTimeout(() => {
         setLoading(false);
-      } catch (error) {
-        console.error(" Error fetching groups:", error);
-        setLoading(false);
-      }
-    };
-
-    const timer = setTimeout(() => {
-      fetchGroups();
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [currentUser]);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [loadingUsers, loadingGroups]);
 
   // Search filter
   useEffect(() => {
@@ -851,6 +874,7 @@ const ChatWindow = () => {
     const fetchDirectMessages = async () => {
       if (!selectedUser || selectedGroup) return;
 
+      setLoadingMessages(true);
       try {
         console.log(" Fetching messages with:", selectedUser.id);
         const response = await axiosInstance.get(
@@ -865,13 +889,13 @@ const ChatWindow = () => {
           const lastMsg = fetchedMessages[fetchedMessages.length - 1];
           setUsers((prevUsers) =>
             prevUsers.map((u) =>
-              u.id === selectedUser.id
+              String(u.id) === String(selectedUser.id)
                 ? {
                     ...u,
                     lastMessage: {
                       content: lastMsg.content,
                       createdAt: lastMsg.createdAt,
-                      senderId: lastMsg.senderId,
+                      senderId: String(lastMsg.senderId),
                     },
                   }
                 : u
@@ -888,15 +912,17 @@ const ChatWindow = () => {
 
           setUsers((prevUsers) =>
             prevUsers.map((u) =>
-              u.id === selectedUser.id ? { ...u, unreadCount: 0 } : u
+              String(u.id) === String(selectedUser.id) ? { ...u, unreadCount: 0 } : u
             )
           );
         } catch (error) {
           console.error("❌ Error marking messages as read:", error);
         }
       } catch (error) {
-        console.error("❌ Error fetching messages:", error);
+        console.error("❌ Error fetching direct messages:", error);
         setMessages([]);
+      } finally {
+        setLoadingMessages(false);
       }
     };
 
@@ -908,6 +934,7 @@ const ChatWindow = () => {
     const fetchGroupMessages = async () => {
       if (!selectedGroup || selectedUser) return;
 
+      setLoadingMessages(true);
       try {
         // console.log(" Fetching group messages for:", selectedGroup.id);
         const response = await axiosInstance.get(
@@ -943,6 +970,8 @@ const ChatWindow = () => {
       } catch (error) {
         console.error("❌ Error fetching group messages:", error);
         setMessages([]);
+      } finally {
+        setLoadingMessages(false);
       }
     };
 
@@ -1013,33 +1042,40 @@ const ChatWindow = () => {
 
         // Optimistically add message to UI
         const tempMessage = {
-          id: Date.now().toString(),
+          id: `temp-${Date.now()}`,
           senderId: currentUser.id,
           receiverId: selectedUser.id,
           content: messageContent,
           createdAt: new Date().toISOString(),
-          senderName: currentUser.name,
+          senderName: currentUser.name || currentUser.userName,
           senderUserName: currentUser.userName,
         };
 
         setMessages((prev) => [...prev, tempMessage]);
 
         // Update last message in user list
-        setUsers((prevUsers) =>
-          prevUsers.map((u) => {
-            if (u.id === selectedUser.id) {
+        setUsers((prevUsers) => {
+          const targetId = String(selectedUser.id).toLowerCase().trim();
+          const updated = prevUsers.map((u) => {
+            if (String(u.id).toLowerCase().trim() === targetId) {
               return {
                 ...u,
+                hasChat: true,
                 lastMessage: {
                   content: messageContent,
                   createdAt: new Date().toISOString(),
-                  senderId: currentUser.id,
+                  senderId: String(currentUser.id),
                 },
               };
             }
             return u;
-          })
-        );
+          });
+          return updated.sort((a, b) => {
+            const timeA = (a.lastMessage?.createdAt || a.lastMessage?.created_at) ? new Date(a.lastMessage.createdAt || a.lastMessage.created_at).getTime() : 0;
+            const timeB = (b.lastMessage?.createdAt || b.lastMessage?.created_at) ? new Date(b.lastMessage.createdAt || b.lastMessage.created_at).getTime() : 0;
+            return timeB - timeA;
+          });
+        });
       }
 
       setNewMessage("");
@@ -1189,10 +1225,9 @@ const ChatWindow = () => {
         addedForChat: true,
       };
 
-      const userExists = chatUsers.some((u) => u.id === user.id);
+      const userExists = users.some((u) => String(u.id).toLowerCase().trim() === String(user.id).toLowerCase().trim());
       if (!userExists) {
         console.log("✅ [ADD CONVERSATION] Adding user to chat list");
-        setChatUsers((prev) => [userWithFlag, ...prev]);
         setUsers((prev) => [userWithFlag, ...prev]);
         setFilteredUsers((prev) => [userWithFlag, ...prev]);
 
@@ -1414,11 +1449,9 @@ const ChatWindow = () => {
     return message.substring(0, maxLength) + "...";
   };
 
-  if (loading) {
-    return <SplashScreen duration={2700} />;
-  }
+  // REMOVED: Initial loading no longer uses SplashScreen, handled in the return JSX with skeletons
 
-  const selectedChat = selectedUser || selectedGroup;
+  const selectedChat = selectedUser || selectedGroup || pendingSelection;
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden">
@@ -1573,18 +1606,55 @@ const ChatWindow = () => {
             className="flex-1 m-0 overflow-hidden min-h-0"
           >
             <ScrollArea className="h-full w-full">
-              {filteredUsers.length === 0 ? (
-                <p className="text-center text-slate-500 text-sm py-8">
-                  {searchQuery ? "No users found" : "No other users available"}
-                </p>
+              {loading ? (
+                <div className="py-2">
+                  {[...Array(8)].map((_, i) => (
+                    <UserSkeleton key={i} />
+                  ))}
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-4 text-center h-full">
+                  <div className="w-16 h-16 bg-darkPurple/5 rounded-full flex items-center justify-center mb-4">
+                    <MessageSquare className="w-8 h-8 text-darkPurple/30" />
+                  </div>
+                  <h3 className="text-base font-semibold text-slate-800 mb-1">No active chats</h3>
+                  <p className="text-xs text-slate-500 mb-6 max-w-[180px] mx-auto">
+                    {searchQuery 
+                      ? `No users found matching "${searchQuery}"`
+                      : "Start a conversation to see it here."}
+                  </p>
+                  {!searchQuery && (
+                    <Button
+                      size="sm"
+                      onClick={() => setShowAddConversationModal(true)}
+                      className="bg-darkPurple hover:bg-darkPurple/90 text-white shadow-md hover:shadow-lg transition-all duration-300 h-9"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      New Chat
+                    </Button>
+                  )}
+                </div>
               ) : (
                 <div className="py-1">
                   {filteredUsers.map((user) => (
                     <button
                       key={user.id}
                       onClick={() => {
-                        setSelectedUser(user);
-                        setSelectedGroup(null);
+                        if (selectedUser?.id === user.id && !selectedGroup) return;
+                        
+                        setLoadingMessages(true);
+                        setPendingSelection(user);
+                        setMessages([]);
+                        // Deliberate 2-second delay as requested
+                        setTimeout(() => {
+                          setSelectedUser(user);
+                          setSelectedGroup(null);
+                          setPendingSelection(null);
+                          // unreadCount update moved here
+                          setUsers(prevUsers => 
+                            prevUsers.map(u => String(u.id) === String(user.id) ? { ...u, unreadCount: 0 } : u)
+                          );
+                        }, 2000);
                       }}
                       className={`w-full flex items-center gap-2 px-2 sm:px-4 py-3 transition-colors overflow-hidden ${
                         selectedUser?.id === user.id && !selectedGroup
@@ -1599,7 +1669,7 @@ const ChatWindow = () => {
                             alt="User Avatar"
                           />
                           <AvatarFallback className="text-white font-semibold text-sm">
-                            {getInitials(user.userName || user.name)}
+                            {getInitials(user.name || user.userName)}
                           </AvatarFallback>
                         </Avatar>
                         <Circle
@@ -1613,7 +1683,7 @@ const ChatWindow = () => {
                       <div className="flex-1 text-left min-w-0">
                         <div className="flex items-start justify-between gap-2 mb-0.5">
                           <p className="font-semibold text-slate-800 text-xs sm:text-sm break-words flex-1">
-                            {user.userName || user.name}
+                            {user.name || user.userName}
                           </p>
                           {user.lastMessage && (
                             <span className="text-xs text-slate-500 flex-shrink-0 whitespace-nowrap">
@@ -1624,7 +1694,7 @@ const ChatWindow = () => {
                         <div className="flex items-center justify-between gap-1 w-full min-w-0">
                           {user.lastMessage ? (
                             <p className="text-xs text-slate-600 flex-1 line-clamp-1 overflow-hidden text-ellipsis min-w-0 break-all">
-                              {user.lastMessage.senderId === currentUser.id
+                              {String(user.lastMessage.senderId) === String(currentUser?.id)
                                 ? "You: "
                                 : ""}
                               {truncateMessage(user.lastMessage.content, 25)}
@@ -1634,7 +1704,7 @@ const ChatWindow = () => {
                               No messages yet
                             </p>
                           )}
-                          {user.unreadCount > 0 && (
+                          {Number(user.unreadCount) > 0 && (
                             <span className="bg-gradient-to-r from-darkPurple to-primaryColor text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 min-h-5 min-w-5 shadow-md">
                               {user.unreadCount}
                             </span>
@@ -1667,7 +1737,19 @@ const ChatWindow = () => {
             </div>
 
             <ScrollArea className="flex-1 w-full">
-              {filteredGroups.length === 0 ? (
+              {loading ? (
+                <div className="py-2">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="px-4 py-3 flex items-center gap-3">
+                      <Skeleton className="w-12 h-12 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredGroups.length === 0 ? (
                 <div className="text-center text-slate-500 py-8">
                   {searchQuery ? (
                     <p className="text-sm">No groups found</p>
@@ -1692,8 +1774,21 @@ const ChatWindow = () => {
                     <button
                       key={group.id}
                       onClick={() => {
-                        setSelectedGroup(group);
-                        setSelectedUser(null);
+                        if (selectedGroup?.id === group.id && !selectedUser) return;
+
+                        setLoadingMessages(true);
+                        setPendingSelection(group);
+                        setMessages([]);
+                        // Deliberate 2-second delay as requested
+                        setTimeout(() => {
+                          setSelectedGroup(group);
+                          setSelectedUser(null);
+                          setPendingSelection(null);
+                          // unreadCount update
+                          setGroups(prevGroups => 
+                            prevGroups.map(g => g.id === group.id ? { ...g, unreadCount: 0 } : g)
+                          );
+                        }, 2000);
                       }}
                       className={`w-full flex items-center gap-2 px-2 sm:px-4 py-3 transition-colors overflow-hidden ${
                         selectedGroup?.id === group.id && !selectedUser
@@ -1723,8 +1818,10 @@ const ChatWindow = () => {
                         <div className="flex items-center justify-between gap-1 w-full min-w-0">
                           {group.lastMessage ? (
                             <p className="text-xs text-slate-600 flex-1 line-clamp-1 overflow-hidden text-ellipsis min-w-0 break-all">
-                              {group.lastMessage.senderName}:{" "}
-                              {truncateMessage(group.lastMessage.content, 15)}
+                              {String(group.lastMessage.senderId) === String(currentUser?.id)
+                                ? "You: "
+                                : `${group.lastMessage.senderName || group.lastMessage.senderUserName || "User"}: `}
+                              {truncateMessage(group.lastMessage.content, 25)}
                             </p>
                           ) : (
                             <p className="text-xs text-slate-400 italic flex-shrink-0">
@@ -1734,6 +1831,11 @@ const ChatWindow = () => {
                           {group.role === "admin" && (
                             <span className="bg-gradient-to-r from-primaryColor/20 to-secondaryColor/20 text-darkPurple text-xs px-2 py-0.5 rounded font-semibold flex-shrink-0 whitespace-nowrap">
                               Admin
+                            </span>
+                          )}
+                          {Number(group.unreadCount) > 0 && (
+                            <span className="bg-gradient-to-r from-darkPurple to-primaryColor text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 min-h-5 min-w-5 shadow-md ml-1">
+                              {group.unreadCount}
                             </span>
                           )}
                         </div>
@@ -1923,7 +2025,15 @@ const ChatWindow = () => {
             {/* Messages */}
             <ScrollArea className="flex-1 p-2 sm:p-4 bg-slate-50 overflow-hidden min-h-0">
               <div className="space-y-2 sm:space-y-4">
-                {messages.length === 0 ? (
+                {loadingMessages ? (
+                  <div className="py-4 space-y-6">
+                    <MessageSkeleton side="left" />
+                    <MessageSkeleton side="right" />
+                    <MessageSkeleton side="left" />
+                    <MessageSkeleton side="right" />
+                    <MessageSkeleton side="left" />
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-slate-400 py-12">
                     <MessageSquare className="w-16 h-16 mb-4" />
                     <p className="text-lg">No messages yet</p>
@@ -2023,6 +2133,23 @@ const ChatWindow = () => {
               </form>
             </div>
           </>
+        ) : loading ? (
+          <div className="hidden md:flex flex-1 flex-col bg-slate-50 p-4 sm:p-6 overflow-hidden">
+            <div className="flex items-center gap-3 mb-6 bg-white p-4 rounded-xl shadow-sm">
+              <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-full" />
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-32 sm:w-48" />
+                <Skeleton className="h-3 w-20 sm:w-24" />
+              </div>
+            </div>
+            <div className="flex-1 space-y-6 sm:space-y-8 px-2 sm:px-4">
+              <MessageSkeleton side="left" />
+              <MessageSkeleton side="right" />
+              <MessageSkeleton side="left" />
+              <MessageSkeleton side="right" />
+              <MessageSkeleton side="left" />
+            </div>
+          </div>
         ) : (
           <div className="hidden md:flex flex-1 items-center justify-center bg-slate-50 p-4">
             <div className="text-center text-slate-400">
@@ -2265,7 +2392,7 @@ const ChatWindow = () => {
         isOpen={showAddConversationModal}
         onOpenChange={setShowAddConversationModal}
         allUsers={allUsers}
-        chatUsers={chatUsers}
+        chatUsers={users}
         onUserSelect={handleAddNewConversation}
         isLoading={loading}
       />

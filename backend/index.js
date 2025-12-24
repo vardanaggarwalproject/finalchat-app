@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { db } from "./config/db.js";
-import { messagesTable, usersTable } from "./drizzle/schema.js";
+import { messagesTable, usersTable, groupMembersTable } from "./drizzle/schema.js";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
@@ -74,7 +74,7 @@ const activeUsers = new Map();
 const socketToUser = new Map();
 
 // Routes
-app.use("/api/auth", authRouter);
+app.use("/api/auth", setIOMiddleware(io, activeUsers), authRouter);
 app.use("/api/user", setIOMiddleware(io, activeUsers), userRouter);
 app.use("/api/groups", groupRouter);
 app.use("/api/messages", messageRouter);
@@ -135,6 +135,21 @@ io.on('connection', async (socket) => {
   // Join user to their personal room
   socket.join(`user:${userId}`);
   // console.log(`   ✅ User joined room: user:${userId}\n`);
+
+  // Join all groups user belongs to for real-time notifications
+  try {
+    const userGroups = await db
+      .select({ groupId: groupMembersTable.groupId })
+      .from(groupMembersTable)
+      .where(eq(groupMembersTable.userId, userId));
+    
+    userGroups.forEach(group => {
+      socket.join(`group:${group.groupId}`);
+      // console.log(`   ✅ User joined group room: group:${group.groupId}`);
+    });
+  } catch (error) {
+    console.error("Error joining group rooms on connection:", error);
+  }
 
   // Get user info and emit to all clients
   try {
@@ -240,10 +255,10 @@ io.on('connection', async (socket) => {
       console.log(`   Receiver Socket ID: ${receiverSocketId ? `Found (${receiverSocketId})` : "NOT FOUND"}`);
       console.log(`   Active Users Count: ${activeUsers.size}`);
 
-      if (receiverSocketId) {
+      if (receiverSocketId || true) { // Always try to emit to the room, or check if any socket is in the room
         try {
-          console.log(`📨 Emitting real-time message to receiver socket: ${receiverSocketId}`);
-          io.to(receiverSocketId).emit("receive_direct_message", messageData);
+          console.log(`📨 Emitting real-time message to receiver room: user:${receiverId}`);
+          io.to(`user:${receiverId}`).emit("receive_direct_message", messageData);
           console.log(`✅ Real-time message emitted successfully`);
         } catch (emitError) {
           console.error(`⚠️  Error emitting real-time message:`, emitError.message);
@@ -405,38 +420,47 @@ io.on('connection', async (socket) => {
         return;
       }
 
-      // Remove from active users map
-      activeUsers.delete(userId);
+      // Remove this specific socket from mappings
       socketToUser.delete(socket.id);
-      console.log(`   ✅ User removed from activeUsers map`);
-      console.log(`   Active users after removal: ${activeUsers.size}`);
+      
+      // Check for other sockets
+      const remainingSockets = await io.in(`user:${userId}`).fetchSockets();
+      const otherActiveSockets = remainingSockets.filter(s => s.id !== socket.id);
 
-      // Update user offline status in database
-      try {
-        await db
-          .update(usersTable)
-          .set({ isOnline: false, lastSeen: new Date(timestamp) })
-          .where(eq(usersTable.id, userId));
+      if (otherActiveSockets.length === 0) {
+        activeUsers.delete(userId);
+        console.log(`   ✅ User removed from activeUsers map (no more sessions)`);
 
-        console.log(`   ✅ Database updated: user marked as offline with timestamp`);
-      } catch (error) {
-        console.error(`   ❌ Error updating user status in database:`, error.message);
+        // Update user offline status in database
+        try {
+          await db
+            .update(usersTable)
+            .set({ isOnline: false, lastSeen: new Date(timestamp) })
+            .where(eq(usersTable.id, userId));
+
+          console.log(`   ✅ Database updated: user marked as offline with timestamp`);
+        } catch (error) {
+          console.error(`   ❌ Error updating user status in database:`, error.message);
+        }
+
+        // Broadcast user offline status to all clients
+        io.emit("user_status_change", {
+          userId: userId,
+          isOnline: false,
+        });
+
+        console.log(`   📢 Broadcasted user_status_change to all clients\n`);
+      } else {
+        console.log(`   ℹ️ User still has ${otherActiveSockets.length} other active sessions. Keeping online status.`);
       }
-
-      // Broadcast user offline status to all clients
-      io.emit("user_status_change", {
-        userId: userId,
-        isOnline: false,
-      });
-
-      console.log(`   📢 Broadcasted user_status_change to all clients\n`);
 
       // Send acknowledgement back to client
       if (callback) {
         callback({
           success: true,
-          message: "User marked offline successfully",
+          message: "Session disconnected successfully",
           userId: userId,
+          wasLastSession: otherActiveSockets.length === 0
         });
       }
     } catch (error) {
@@ -451,37 +475,45 @@ io.on('connection', async (socket) => {
   });
 
   // Handle disconnect
+  // Handle disconnect
   socket.on('disconnect', async () => {
     console.log(`\n❌ [DISCONNECT] User disconnected`);
     console.log(`   User ID: ${userId}`);
     console.log(`   Socket ID: ${socket.id}`);
-    console.log(`   Active users before: ${activeUsers.size}`);
 
-    activeUsers.delete(userId);
     socketToUser.delete(socket.id);
+    console.log(`   ✅ Socket removed from socketToUser mapping`);
 
-    console.log(`   ✅ User removed from activeUsers map`);
-    console.log(`   Active users after: ${activeUsers.size}`);
+    // Check if user has any OTHER active sockets before marking offline
+    const remainingSockets = await io.in(`user:${userId}`).fetchSockets();
+    console.log(`   Remaining sockets for user ${userId}: ${remainingSockets.length}`);
 
-    // Update user offline status in database
-    try {
-      await db
-        .update(usersTable)
-        .set({ isOnline: false, lastSeen: new Date() })
-        .where(eq(usersTable.id, userId));
+    if (remainingSockets.length === 0) {
+      activeUsers.delete(userId);
+      console.log(`   ✅ User ${userId} has no more active sessions. Marking OFFLINE.`);
+      
+      // Update user offline status in database
+      try {
+        await db
+          .update(usersTable)
+          .set({ isOnline: false, lastSeen: new Date() })
+          .where(eq(usersTable.id, userId));
 
-      console.log(`   ✅ Database updated: user marked as offline`);
-    } catch (error) {
-      console.error(`   ❌ Error updating user status:`, error.message);
+        console.log(`   ✅ Database updated: user marked as offline`);
+      } catch (error) {
+        console.error(`   ❌ Error updating user status:`, error.message);
+      }
+
+      // Broadcast user offline status
+      io.emit("user_status_change", {
+        userId,
+        isOnline: false,
+      });
+
+      console.log(`   📢 Broadcasted user_status_change to all clients\n`);
+    } else {
+      console.log(`   ℹ️ User ${userId} still has ${remainingSockets.length} active sessions. Staying online.\n`);
     }
-
-    // Broadcast user offline status
-    io.emit("user_status_change", {
-      userId,
-      isOnline: false,
-    });
-
-    console.log(`   📢 Broadcasted user_status_change to all clients\n`);
   });
 });
 
