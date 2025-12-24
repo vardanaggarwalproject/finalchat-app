@@ -114,6 +114,9 @@ const ChatWindow = () => {
   const [editImage, setEditImage] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
+  // Add new conversation modal states
+  const [showAddConversationModal, setShowAddConversationModal] = useState(false);
+
   const [connectionStatus, setConnectionStatus] = useState("connected"); // connected, disconnected, reconnecting
 
   // ... (existing code)
@@ -262,8 +265,15 @@ const ChatWindow = () => {
         setEditName(user.name || user.userName || "");
         setEditEmail(user.email || "");
         setEditImage(user.image || "");
+        
+        // Immediate data fetch to ensure UI populates even if socket delays
+        fetchUsers(user);
+        fetchGroups(user);
+        setLoading(false);
       } catch (error) {
         console.error(" Error initializing user:", error);
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
         navigate("/login");
       }
     };
