@@ -267,8 +267,11 @@ const ChatWindow = () => {
         setEditImage(user.image || "");
         
         // Immediate data fetch to ensure UI populates even if socket delays
-        fetchUsers(user);
-        fetchGroups(user);
+        // Await these to ensure skeletons show until data is ready (prevents flickering)
+        await Promise.all([
+          fetchUsers(user),
+          fetchGroups(user)
+        ]);
         setLoading(false);
       } catch (error) {
         console.error(" Error initializing user:", error);
@@ -711,9 +714,10 @@ const ChatWindow = () => {
 
       // Add message to chat if it's in the currently selected group
       // CRITICAL: Also ensure we're NOT viewing a direct message chat
+      // CRITICAL: Use String() for comparison to handle potentially mixed types (number/string)
       const isActiveGroup = selectedGroupRef.current && 
                            !selectedUserRef.current &&  // Must NOT have a user selected
-                           messageData.groupId === selectedGroupRef.current.id;
+                           String(messageData.groupId) === String(selectedGroupRef.current.id);
       console.log(`   🎯 Is Active Group: ${isActiveGroup}`);
       console.log(`   📊 Selected User: ${selectedUserRef.current?.userName || 'none'}`);
       console.log(`   📊 Selected Group: ${selectedGroupRef.current?.name || 'none'}`);
