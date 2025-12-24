@@ -352,6 +352,25 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
 
     console.log(`✅ [ADD MEMBER] Member added successfully`);
 
+    // Broadcast member added event
+    if (req.io) {
+      console.log(`\n📢 [BROADCAST] User ${userId} added to group ${groupId}`);
+      
+      // Get full group details to send to the new member
+      const [groupDetails] = await db
+        .select()
+        .from(groupsTable)
+        .where(eq(groupsTable.id, groupId));
+
+      req.io.emit("group_member_added", {
+        groupId,
+        userId,
+        addedBy: req.userId,
+        group: groupDetails,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     res.status(201).json({
       message: "Member added successfully",
       member: {
@@ -415,6 +434,17 @@ router.delete("/:groupId/members/:userId", authenticateUser, async (req, res) =>
 
     console.log(`✅ [REMOVE MEMBER] Member removed successfully`);
 
+    // Broadcast member removed event
+    if (req.io) {
+      console.log(`\n📢 [BROADCAST] User ${userId} removed from group ${groupId}`);
+      req.io.emit("group_member_removed", {
+        groupId,
+        userId,
+        removedBy: req.userId,
+        timestamp: new Date().toISOString()
+      });
+    }
+
     res.json({ message: "Member removed successfully" });
   } catch (error) {
     console.error("Error removing member:", error);
@@ -466,6 +496,18 @@ router.post("/:groupId/exit", authenticateUser, async (req, res) => {
       );
 
     console.log(`✅ [EXIT GROUP] User exited successfully`);
+
+    // Broadcast user exit event (treated same as removal but triggered by self)
+    if (req.io) {
+      console.log(`\n📢 [BROADCAST] User ${userId} exited group ${groupId}`);
+      req.io.emit("group_member_removed", {
+        groupId,
+        userId,
+        removedBy: userId, // Self-removed
+        reason: "exit",
+        timestamp: new Date().toISOString()
+      });
+    }
 
     res.json({ message: "You have exited the group" });
   } catch (error) {

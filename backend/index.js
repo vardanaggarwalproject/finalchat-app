@@ -76,7 +76,7 @@ const socketToUser = new Map();
 // Routes
 app.use("/api/auth", setIOMiddleware(io, activeUsers), authRouter);
 app.use("/api/user", setIOMiddleware(io, activeUsers), userRouter);
-app.use("/api/groups", groupRouter);
+app.use("/api/groups", setIOMiddleware(io, activeUsers), groupRouter);
 app.use("/api/messages", messageRouter);
 
 // Socket.io authentication middleware

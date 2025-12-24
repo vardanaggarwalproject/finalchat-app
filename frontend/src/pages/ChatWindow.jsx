@@ -114,8 +114,37 @@ const ChatWindow = () => {
   const [editImage, setEditImage] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
-  // Add new conversation modal states
-  const [showAddConversationModal, setShowAddConversationModal] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState("connected"); // connected, disconnected, reconnecting
+
+  // ... (existing code)
+
+  // Connection status monitoring
+  useEffect(() => {
+    if (socket.connected) {
+      setConnectionStatus("connected");
+    }
+
+    const onConnect = () => setConnectionStatus("connected");
+    const onDisconnect = () => setConnectionStatus("disconnected");
+    const onReconnectAttempt = () => setConnectionStatus("reconnecting");
+    const onReconnect = () => {
+      setConnectionStatus("connected");
+      fetchUsers();
+      fetchGroups();
+    };
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("reconnect_attempt", onReconnectAttempt);
+    socket.on("reconnect", onReconnect);
+
+    return () => {
+      socket.off("connect", onConnect);
+      socket.off("disconnect", onDisconnect);
+      socket.off("reconnect_attempt", onReconnectAttempt);
+      socket.off("reconnect", onReconnect);
+    };
+  }, []);
   const [allUsers, setAllUsers] = useState([]); // All available users (for modal)
   const [chatUsers, setChatUsers] = useState([]); // Only users with chat history (for main tab)
 
@@ -131,6 +160,19 @@ const ChatWindow = () => {
   const selectedUserRef = useRef(null);
   const selectedGroupRef = useRef(null);
   const currentUserRef = useRef(null);
+
+  // Sync refs with state for socket listeners
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
+  useEffect(() => {
+    selectedUserRef.current = selectedUser;
+  }, [selectedUser]);
+
+  useEffect(() => {
+    selectedGroupRef.current = selectedGroup;
+  }, [selectedGroup]);
 
   // Helper to update and sort user/group lists for sidebar
   const refreshSidebar = useCallback(() => {
@@ -746,6 +788,107 @@ const ChatWindow = () => {
           return prevGroups;
         });
       }
+    });
+
+    // Listen for member added to group
+    socket.on("group_member_added", (data) => {
+      console.log("👥 [SOCKET] Group member added:", data);
+      
+      // If current user was added, add the group to their list
+      if (String(data.userId) === String(currentUserRef.current?.id)) {
+        console.log("✅ Current user added to new group, adding to list");
+        setGroups((prevGroups) => {
+          const exists = prevGroups.find((g) => g.id === data.groupId);
+          if (!exists && data.group) {
+            
+            // Join the socket room for this group
+            socket.emit("join_group", { groupId: data.groupId });
+            
+            return [{ ...data.group, role: "member", unreadCount: 0 }, ...prevGroups];
+          }
+          return prevGroups;
+        });
+      }
+    });
+
+    // Listen for member removed from group
+    socket.on("group_member_removed", (data) => {
+      console.log("👋 [SOCKET] Group member removed:", data);
+      
+      // If current user was removed, remove the group from their list
+      if (String(data.userId) === String(currentUserRef.current?.id)) {
+        console.log("🚫 Current user removed from group, removing from list");
+        
+        // Remove from groups list
+        setGroups((prevGroups) => prevGroups.filter((g) => g.id !== data.groupId));
+        
+        // If currently viewing this group, clear selection
+        if (selectedGroupRef.current && selectedGroupRef.current.id === data.groupId) {
+          setSelectedGroup(null);
+        }
+      }
+    });
+
+    // Listen for profile updates
+    socket.on("profile_updated", (data) => {
+      console.log("👤 [SOCKET] Profile updated:", data);
+      const updatedUser = data.user;
+      
+      // Update users list
+      setUsers((prevUsers) => 
+        prevUsers.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u)
+      );
+      
+      // Update allUsers list (for modal)
+      setAllUsers((prevAllUsers) => 
+        prevAllUsers.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u)
+      );
+      
+      // Update filtered users if needed
+      setFilteredUsers((prevFiltered) => 
+        prevFiltered.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser } : u)
+      );
+      
+      // Update selected user if currently chatting with them
+      if (selectedUserRef.current && selectedUserRef.current.id === updatedUser.id) {
+        setSelectedUser(prev => ({ ...prev, ...updatedUser }));
+      }
+      
+      // Update messages to reflect new name/avatar
+      setMessages((prevMessages) => 
+        prevMessages.map(msg => 
+          msg.senderId === updatedUser.id 
+            ? { ...msg, senderName: updatedUser.name || updatedUser.userName, senderUserName: updatedUser.userName } 
+            : msg
+        )
+      );
+      
+      // Update group last messages
+      setGroups((prevGroups) => 
+        prevGroups.map(g => {
+          if (g.lastMessage && g.lastMessage.senderName === (updatedUser.name || updatedUser.userName)) { // This check is heuristic
+             // Better to just update if we knew the sender ID of last message, but we might not always have it
+             return g; 
+          }
+          return g;
+        })
+      );
+    });
+
+    // Connection status monitoring
+    socket.on("connect", () => {
+      console.log("✅ [SOCKET] Connected");
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("❌ [SOCKET] Disconnected:", reason);
+    });
+
+    socket.on("reconnect", (attemptNumber) => {
+      console.log("🔄 [SOCKET] Reconnected after attempt", attemptNumber);
+      // Re-fetch crucial data on reconnect
+      fetchUsers();
+      fetchGroups();
     });
 
     // Listen for being added to a group
@@ -1506,7 +1649,21 @@ const ChatWindow = () => {
               className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
             >
               <Logo className="w-10 h-10" />
-              <span className="text-xl font-bold text-[#040316]">VibeMesh</span>
+              <div className="flex flex-col items-start">
+                <span className="text-xl font-bold text-[#040316] leading-none">VibeMesh</span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <div className={`w-2 h-2 rounded-full ${
+                    connectionStatus === "connected" ? "bg-green-500" :
+                    connectionStatus === "reconnecting" ? "bg-yellow-500 animate-pulse" :
+                    "bg-red-500"
+                  }`} />
+                  <span className="text-[10px] font-medium text-slate-500 uppercase tracking-wider leading-none">
+                    {connectionStatus === "connected" ? "Online" :
+                     connectionStatus === "reconnecting" ? "Reconnecting" :
+                     "Offline"}
+                  </span>
+                </div>
+              </div>
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
