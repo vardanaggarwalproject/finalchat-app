@@ -650,29 +650,58 @@ const ChatWindow = () => {
 
     // Listen for new group messages - Enhanced for unread counts
     socket.on("receive_group_message", (messageData) => {
-      console.log(" Received group message:", messageData);
+      console.log("📨 [RECEIVE_GROUP_MESSAGE] Received group message:", messageData);
+      console.log(`   Group ID: ${messageData.groupId}`);
+      console.log(`   Sender: ${messageData.senderUserName || messageData.senderName}`);
+      console.log(`   Content: "${messageData.content?.substring(0, 50)}..."`);
+      console.log(`   Message ID: ${messageData.id}`);
+      console.log(`   Created At: ${messageData.createdAt}`);
 
       // Add message to chat if it's in the currently selected group
-      const isActiveGroup = selectedGroupRef.current && messageData.groupId === selectedGroupRef.current.id;
+      // CRITICAL: Also ensure we're NOT viewing a direct message chat
+      const isActiveGroup = selectedGroupRef.current && 
+                           !selectedUserRef.current &&  // Must NOT have a user selected
+                           messageData.groupId === selectedGroupRef.current.id;
+      console.log(`   🎯 Is Active Group: ${isActiveGroup}`);
+      console.log(`   📊 Selected User: ${selectedUserRef.current?.userName || 'none'}`);
+      console.log(`   📊 Selected Group: ${selectedGroupRef.current?.name || 'none'}`);
       
       if (isActiveGroup) {
         setMessages((prevMessages) => {
           // Check if message already exists to prevent duplicates
           const exists = prevMessages.some((msg) => msg.id === messageData.id);
           if (exists) {
-            console.log(" Message already in chat, skipping:", messageData.id);
+            console.log("⚠️  Message already in chat, skipping:", messageData.id);
             return prevMessages;
           }
-          console.log(" Adding received group message:", messageData.id);
+          console.log("✅ Adding received group message to active chat:", messageData.id);
           return [...prevMessages, messageData];
         });
+      } else {
+        console.log("📝 Message is for a different group or user is selected, updating sidebar only");
       }
 
-      // Update group list with new last message and UNREAD COUNT
-      setGroups((prevGroups) =>
-        prevGroups.map((g) => {
+      // CRITICAL: Update group list with new last message and UNREAD COUNT
+      // This MUST happen for ALL groups, not just the active one
+      console.log(`\n   🔄 [SIDEBAR UPDATE] Updating group sidebar...`);
+      setGroups((prevGroups) => {
+        console.log(`      Total groups before update: ${prevGroups.length}`);
+        const groupExists = prevGroups.find(g => String(g.id) === String(messageData.groupId));
+        console.log(`      Target group exists: ${!!groupExists}`);
+        if (groupExists) {
+          console.log(`      Target group name: "${groupExists.name}"`);
+        }
+        
+        const updatedGroups = prevGroups.map((g) => {
           if (String(g.id) === String(messageData.groupId)) {
             const isDifferentUser = String(messageData.senderId) !== String(currentUserRef.current?.id);
+            const newUnreadCount = isActiveGroup ? 0 : (isDifferentUser ? (g.unreadCount || 0) + 1 : g.unreadCount);
+            
+            console.log(`      ✅ MATCH FOUND - Updating group "${g.name}"`);
+            console.log(`         Old unread: ${g.unreadCount || 0}, New unread: ${newUnreadCount}`);
+            console.log(`         Old last message: "${g.lastMessage?.content?.substring(0, 30)}..."`);
+            console.log(`         New last message: "${messageData.content?.substring(0, 30)}..."`);
+            
             return {
               ...g,
               lastMessage: {
@@ -681,16 +710,24 @@ const ChatWindow = () => {
                 senderName:
                   messageData.senderUserName || messageData.senderName,
               },
-              unreadCount: isActiveGroup ? 0 : (isDifferentUser ? (g.unreadCount || 0) + 1 : g.unreadCount)
+              unreadCount: newUnreadCount
             };
           }
           return g;
-        }).sort((a, b) => {
+        });
+        
+        console.log(`      Groups after update: ${updatedGroups.length}`);
+        
+        // Sort by most recent message
+        const sortedGroups = updatedGroups.sort((a, b) => {
           const timeA = (a.lastMessage?.createdAt || a.lastMessage?.created_at) ? new Date(a.lastMessage.createdAt || a.lastMessage.created_at).getTime() : 0;
           const timeB = (b.lastMessage?.createdAt || b.lastMessage?.created_at) ? new Date(b.lastMessage.createdAt || b.lastMessage.created_at).getTime() : 0;
           return timeB - timeA;
-        })
-      );
+        });
+        
+        console.log(`   ✅ [SIDEBAR UPDATE] Complete - returning ${sortedGroups.length} groups\n`);
+        return sortedGroups;
+      });
     });
 
     // Listen for new groups created (real-time sync)

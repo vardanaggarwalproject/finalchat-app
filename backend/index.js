@@ -119,36 +119,34 @@ io.on('connection', async (socket) => {
       .set({ isOnline: true, lastSeen: new Date() })
       .where(eq(usersTable.id, userId));
 
-    // console.log(`   ✅ Database updated: user marked as online`);
+    console.log(`   ✅ Database updated: user marked as online`);
   } catch (error) {
-    console.error(` Error updating user status:`, error.message);
+    console.error(`❌ Error updating user status:`, error.message);
   }
-
-  // Broadcast user online status to all connected clients
-  io.emit("user_status_change", {
-    userId,
-    isOnline: true,
-  });
-
-  // console.log(`   📢 Broadcasted user_status_change to all clients`);
 
   // Join user to their personal room
   socket.join(`user:${userId}`);
-  // console.log(`   ✅ User joined room: user:${userId}\n`);
+  console.log(`   ✅ User joined personal room: user:${userId}`);
 
-  // Join all groups user belongs to for real-time notifications
+  // CRITICAL: Join all groups user belongs to BEFORE broadcasting online status
+  // This prevents race conditions where other users send messages before this user has joined rooms
   try {
     const userGroups = await db
       .select({ groupId: groupMembersTable.groupId })
       .from(groupMembersTable)
       .where(eq(groupMembersTable.userId, userId));
     
+    console.log(`   📁 User ${userId} belongs to ${userGroups.length} groups`);
     userGroups.forEach(group => {
       socket.join(`group:${group.groupId}`);
-      // console.log(`   ✅ User joined group room: group:${group.groupId}`);
+      console.log(`   ✅ User ${userId} joined group room: group:${group.groupId}`);
     });
+    
+    if (userGroups.length > 0) {
+      console.log(`   ✅ User ${userId} successfully joined all ${userGroups.length} group rooms`);
+    }
   } catch (error) {
-    console.error("Error joining group rooms on connection:", error);
+    console.error("❌ Error joining group rooms on connection:", error);
   }
 
   // Get user info and emit to all clients
@@ -168,11 +166,20 @@ io.on('connection', async (socket) => {
     console.error("Error fetching user:", error);
   }
 
+  // NOW broadcast user online status AFTER joining all rooms
+  // This ensures the user is ready to receive messages
+  io.emit("user_status_change", {
+    userId,
+    isOnline: true,
+  });
+
+  console.log(`   📢 User setup complete - broadcasted online status\n`);
+
   // Handle joining a group
   socket.on("join_group", async (data) => {
     const { groupId } = data;
     socket.join(`group:${groupId}`);
-    // console.log(`📥 User ${userId} joined group ${groupId}`);
+    console.log(`📥 [JOIN_GROUP] User ${userId} explicitly joined group ${groupId}`);
 
     socket.to(`group:${groupId}`).emit("user_joined_group", {
       userId,
@@ -333,12 +340,19 @@ io.on('connection', async (socket) => {
       // Broadcast to all OTHER users in the group (excluding sender)
       // Sender already has the message from optimistic UI update
       console.log(`📢 Broadcasting to other users in group: group:${groupId}`);
+      
+      // Get all sockets in this group room for debugging
+      const socketsInRoom = await io.in(`group:${groupId}`).fetchSockets();
+      console.log(`   👥 Total sockets in group room: ${socketsInRoom.length}`);
+      console.log(`   👥 Socket IDs in room: ${socketsInRoom.map(s => s.id.substring(0, 8)).join(", ")}`);
+      console.log(`   📤 Broadcasting to ${socketsInRoom.length - 1} other members (excluding sender)`);
+      
       socket.broadcast.to(`group:${groupId}`).emit("receive_group_message", messageData);
 
       // Confirm to sender that message was sent and saved with full message data
       // This allows the frontend to replace the optimistic message with the confirmed message
       socket.emit("message_sent", messageData);
-      console.log(`✅ Group message broadcasted successfully\n`);
+      console.log(`✅ Group message broadcasted successfully to ${socketsInRoom.length - 1} members\n`);
 
     } catch (error) {
       console.error(`❌ Error in send_group_message:`, error.message);
