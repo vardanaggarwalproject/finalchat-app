@@ -95,50 +95,66 @@ export const getAllUsers = async (req, res) => {
     
     const unreadMap = new Map(unreadCounts.map(c => [String(c.senderId), c.count]));
 
-    // 4. Transform users and fetch last messages
-    // Note: Last message is still fetched individually but parallelized, or we could use a complex join
-    const usersWithMetadata = await Promise.all(
-      users.map(async (user) => {
-        // Fetch last message
-        const [lastMessage] = await db
-          .select({
-            content: messagesTable.content,
-            createdAt: messagesTable.createdAt,
-            senderId: messagesTable.senderId,
-          })
-          .from(messagesTable)
-          .where(
-            and(
-              or(
-                and(
-                  eq(messagesTable.senderId, currentUserId),
-                  eq(messagesTable.receiverId, user.id)
-                ),
-                and(
-                  eq(messagesTable.senderId, user.id),
-                  eq(messagesTable.receiverId, currentUserId)
-                )
-              ),
-              isNull(messagesTable.groupId)
-            )
-          )
-          .orderBy(desc(messagesTable.createdAt))
-          .limit(1);
+    // 4. Fetch ALL last messages for the current user in a SINGLE optimized query
+    // Use DISTINCT ON to get the latest message per conversation
+    // NOTE: Using subquery to define partner_id avoids "expression must match" errors with parameterized queries
+    const lastMessages = await db.execute(sql`
+      SELECT DISTINCT ON (partner_id) *
+      FROM (
+        SELECT *, 
+          CASE 
+            WHEN "sender_id" = ${currentUserId} THEN "receiver_id" 
+            ELSE "sender_id" 
+          END as partner_id
+        FROM ${messagesTable}
+        WHERE (
+          "sender_id" = ${currentUserId} OR "receiver_id" = ${currentUserId}
+        )
+        AND "group_id" IS NULL
+      ) as subquery
+      ORDER BY partner_id, "created_at" DESC
+    `);
+    
+    // Create a map of conversationPartnerId -> message (mapped to camelCase)
+    const lastMessageMap = new Map();
+    // Helper to extract rows
+    const rows = (lastMessages && Array.isArray(lastMessages)) 
+      ? lastMessages 
+      : (lastMessages && lastMessages.rows) 
+        ? lastMessages.rows 
+        : [];
+       
+    rows.forEach(msg => {
+       // Map raw snake_case DB fields to camelCase for frontend
+       // Note: msg.partner_id is available now from subquery but we use logic for safety or just use it
+       const partnerId = String(msg.partner_id);
+       
+       lastMessageMap.set(partnerId, {
+         ...msg,
+         senderId: msg.sender_id,
+         receiverId: msg.receiver_id,
+         groupId: msg.group_id,
+         createdAt: msg.created_at,
+         isRead: msg.is_read,
+         // messageType and other fields should also be mapped if used
+       });
+    });
 
+    const usersWithMetadata = users.map((user) => {
         const userIdStr = String(user.id);
-        const hasChat = !!lastMessage;
         const addedForChat = contactIds.has(userIdStr);
+        const lastMessage = lastMessageMap.get(userIdStr) || null;
+        const hasChat = !!lastMessage;
 
         return {
           ...user,
           isOnline: activeUsers ? activeUsers.has(userIdStr) : user.isOnline,
-          lastMessage: lastMessage || null,
+          lastMessage: lastMessage,
           unreadCount: unreadMap.get(userIdStr) || 0,
           hasChat,
           addedForChat
         };
-      })
-    );
+    });
 
     const endTime = Date.now();
     console.log(`✅ [GET_ALL_USERS] Completed in ${endTime - startTime}ms`);

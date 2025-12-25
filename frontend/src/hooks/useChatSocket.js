@@ -306,6 +306,49 @@ export const useChatSocket = () => {
         }
     };
 
+    const onUserCreated = (data) => {
+        const { user } = data;
+        
+        console.log(`👤 [USER CREATED] New user signed up: ${user.userName} (ID: ${user.id})`);
+        
+        // Add the new user to allUsers list (for Add New Conversation modal)
+        // Only add if it's not the current user
+        if (String(user.id) !== String(currentUserRef.current?.id)) {
+            setAllUsers(prev => {
+                // Check if user already exists
+                const exists = prev.find(u => String(u.id) === String(user.id));
+                if (exists) {
+                    console.log(`   ℹ️  User already exists in allUsers list`);
+                    return prev;
+                }
+                
+                console.log(`   ✅ Added new user to allUsers list`);
+                return [...prev, user];
+            });
+        }
+    };
+
+    const onUserOnline = (user) => {
+        // user object has { id, userName, name, image, ... }
+        // Emitted when a user connects via socket
+        
+        // Ignore self
+        if (String(user.id) === String(currentUserRef.current?.id)) return;
+
+        setAllUsers(prev => {
+            const exists = prev.find(u => String(u.id) === String(user.id));
+            if (exists) {
+                 // Update status to online if present
+                 return prev.map(u => String(u.id) === String(user.id) ? { ...u, ...user, isOnline: true } : u);
+            }
+            console.log(`👤 [USER ONLINE] Added missing user to allUsers: ${user.userName}`);
+            return [...prev, { ...user, isOnline: true }];
+        });
+        
+        // Also update sidebar users if present (though user_status_change handles this too)
+        setUsers(prev => prev.map(u => String(u.id) === String(user.id) ? { ...u, ...user, isOnline: true } : u));
+    };
+
     // Attach listeners
     socket.on("connect", onConnect);
     socket.on("connect_error", onConnectError);
@@ -321,6 +364,8 @@ export const useChatSocket = () => {
     socket.on("group_member_added", onGroupMemberAdded);
     socket.on("group_member_removed", onGroupMemberRemoved);
     socket.on("profile_updated", onProfileUpdated);
+    socket.on("user_created", onUserCreated);
+    socket.on("user_online", onUserOnline);
 
     return () => {
       socket.off("connect", onConnect);
@@ -337,6 +382,8 @@ export const useChatSocket = () => {
       socket.off("group_member_added", onGroupMemberAdded);
       socket.off("group_member_removed", onGroupMemberRemoved);
       socket.off("profile_updated", onProfileUpdated);
+      socket.off("user_created", onUserCreated);
+      socket.off("user_online", onUserOnline);
     };
   }, [currentUser]);
 

@@ -35,6 +35,8 @@ const SidebarItemSkeleton = () => (
     </div>
 );
 
+import { useDebounce } from '../../../hooks/useDebounce';
+
 const ChatSidebar = () => {
   const {
     currentUser,
@@ -58,6 +60,22 @@ const ChatSidebar = () => {
   } = useChat();
 
   const [activeTab, setActiveTab] = useState("users");
+  
+  // Local state for debounced search
+  const [localSearch, setLocalSearch] = useState(searchQuery);
+  const debouncedSearch = useDebounce(localSearch, 500);
+
+  // Sync debounced value to context
+  React.useEffect(() => {
+    setSearchQuery(debouncedSearch);
+  }, [debouncedSearch, setSearchQuery]);
+
+  // Sync context value to local (in case cleared externally)
+  React.useEffect(() => {
+    if (searchQuery !== debouncedSearch && searchQuery !== localSearch) {
+       setLocalSearch(searchQuery);
+    }
+  }, [searchQuery]);
 
   const handleSelectUser = (user) => {
     if (selectedUser?.id === user.id) return;
@@ -145,8 +163,8 @@ const ChatSidebar = () => {
           <Input
             placeholder="Search conversations..."
             className="pl-11 bg-slate-50 border-slate-100 rounded-2xl focus-visible:ring-0 focus-visible:border-slate-200 focus-visible:bg-white transition-all text-sm h-12 shadow-sm"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
           />
         </div>
         <Button 

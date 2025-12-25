@@ -133,50 +133,6 @@ export const useProfileSync = (setUsers, setSelectedUser, currentUser) => {
   return {
     isSetup: true,
   };
-};
-
-/**
- * Alternative hook for periodic profile refresh (fallback mechanism)
- * If socket events are missed, this ensures profiles stay fresh
- */
-export const useProfileRefreshFallback = (currentUser) => {
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    // Fallback: Verify profile is still up to date every 30 seconds
-    // This ensures if socket events are missed, we eventually sync
-    const intervalId = setInterval(() => {
-      console.log("🔄 [FALLBACK] Periodic profile refresh check");
-
-      // Store current timestamp
-      const lastRefreshTime = localStorage.getItem("lastProfileRefreshTime");
-      const now = Date.now();
-
-      // Only refresh if user was actively using the app (check socket connection)
-      if (socket && socket.connected) {
-        const timeSinceLastRefresh = lastRefreshTime
-          ? now - parseInt(lastRefreshTime)
-          : 0;
-
-        // Refresh if more than 30 seconds have passed
-        if (!lastRefreshTime || timeSinceLastRefresh > 30000) {
-          console.log("✅ Triggering fallback profile refresh (30s interval)");
-          localStorage.setItem("lastProfileRefreshTime", now.toString());
-
-          // Emit a custom event to trigger user list refresh
-          window.dispatchEvent(
-            new CustomEvent("refreshUserProfiles", { detail: { force: false } })
-          );
-        }
-      }
-    }, 30000); // Check every 30 seconds
-
-    return () => {
-      clearInterval(intervalId);
-      console.log("🧹 Cleared profile refresh interval");
-    };
-  }, [currentUser]);
-
   return {
     isSetup: true,
   };

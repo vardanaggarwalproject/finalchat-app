@@ -1,8 +1,13 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { db } from "../config/db.js";
-import { groupsTable, groupMembersTable, messagesTable, usersTable } from "../drizzle/schema.js";
-import { eq, and, desc } from "drizzle-orm";
+import {
+  groupsTable,
+  groupMembersTable,
+  messagesTable,
+  usersTable,
+} from "../drizzle/schema.js";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
 
 const router = express.Router();
 
@@ -11,23 +16,28 @@ const authenticateUser = async (req, res, next) => {
   try {
     // Get token from cookies
     let token = req.cookies.token;
-    
+
     // console.log("Raw token from cookies:", token);
-    
+
     if (!token) {
-      return res.status(401).json({ error: "Unauthorized - No token provided" });
+      return res
+        .status(401)
+        .json({ error: "Unauthorized - No token provided" });
     }
 
     // Handle case where token might be JSON stringified
-    if (typeof token === 'object') {
+    if (typeof token === "object") {
       token = token.token || JSON.stringify(token);
     }
 
     // If token is a string that looks like JSON, try to parse it
-    if (typeof token === 'string' && (token.startsWith('{') || token.startsWith('j:'))) {
+    if (
+      typeof token === "string" &&
+      (token.startsWith("{") || token.startsWith("j:"))
+    ) {
       try {
         // Remove 'j:' prefix if present (added by cookie-parser for JSON cookies)
-        if (token.startsWith('j:')) {
+        if (token.startsWith("j:")) {
           token = token.substring(2);
         }
         const parsed = JSON.parse(token);
@@ -44,11 +54,13 @@ const authenticateUser = async (req, res, next) => {
 
     // Verify JWT token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // console.log("Decoded token:", decoded);
 
     if (!decoded || !decoded.userId) {
-      return res.status(401).json({ error: "Unauthorized - Invalid token structure" });
+      return res
+        .status(401)
+        .json({ error: "Unauthorized - Invalid token structure" });
     }
 
     // Attach user ID to request
@@ -61,14 +73,14 @@ const authenticateUser = async (req, res, next) => {
       .select({ id: usersTable.id })
       .from(usersTable)
       .where(eq(usersTable.id, req.userId));
-    
+
     if (!user) {
       console.error("❌ User not found in database:", req.userId);
       return res.status(401).json({ error: "User not found" });
     }
-    
+
     // console.log(" User verified in database:", user.id);
-    
+
     next();
   } catch (error) {
     console.error("Authentication error:", error.message);
@@ -80,14 +92,19 @@ router.post("/create", authenticateUser, async (req, res) => {
   try {
     const { name, description, memberIds = [] } = req.body;
 
-    console.log(`\n📁 [CREATE GROUP] User ${req.userId} creating group "${name}" with ${memberIds.length} members`);
+    console.log(
+      `\n📁 [CREATE GROUP] User ${req.userId} creating group "${name}" with ${memberIds.length} members`
+    );
 
     // Create group
-    const [newGroup] = await db.insert(groupsTable).values({
-      name,
-      description,
-      createdBy: req.userId,
-    }).returning();
+    const [newGroup] = await db
+      .insert(groupsTable)
+      .values({
+        name,
+        description,
+        createdBy: req.userId,
+      })
+      .returning();
 
     console.log(`✅ Group created with ID: ${newGroup.id}`);
 
@@ -100,7 +117,7 @@ router.post("/create", authenticateUser, async (req, res) => {
 
     // Add other members
     if (memberIds.length > 0) {
-      const memberValues = memberIds.map(userId => ({
+      const memberValues = memberIds.map((userId) => ({
         groupId: newGroup.id,
         userId,
         role: "member",
@@ -113,16 +130,16 @@ router.post("/create", authenticateUser, async (req, res) => {
       ...newGroup,
       role: "admin",
       lastMessage: null,
-      unreadCount: 0
+      unreadCount: 0,
     };
 
     // 🔔 CRITICAL: Emit socket events to notify all members
     if (req.io) {
       console.log(`📢 [SOCKET] Notifying members about new group`);
-      
+
       // All member IDs including creator
       const allMemberIds = [req.userId, ...memberIds];
-      
+
       // Notify each member individually via their personal room
       allMemberIds.forEach((memberId) => {
         const memberRole = memberId === req.userId ? "admin" : "member";
@@ -130,23 +147,33 @@ router.post("/create", authenticateUser, async (req, res) => {
           ...newGroup,
           role: memberRole,
           lastMessage: null,
-          unreadCount: 0
+          unreadCount: 0,
         };
-        
-        console.log(`   🔔 Notifying user ${memberId} (${memberRole}) via room: user:${memberId}`);
-        req.io.to(`user:${memberId}`).emit("added_to_group", groupDataForMember);
+
+        console.log(
+          `   🔔 Notifying user ${memberId} (${memberRole}) via room: user:${memberId}`
+        );
+        req.io
+          .to(`user:${memberId}`)
+          .emit("added_to_group", groupDataForMember);
       });
-      
-      console.log(`✅ Notified ${allMemberIds.length} members about group creation`);
+
+      console.log(
+        `✅ Notified ${allMemberIds.length} members about group creation`
+      );
     } else {
-      console.warn(`⚠️  Socket.io not available, members won't be notified in real-time`);
+      console.warn(
+        `⚠️  Socket.io not available, members won't be notified in real-time`
+      );
     }
 
     // Return group with memberIds for socket event
     res.status(201).json({ group: groupWithDetails, memberIds });
   } catch (error) {
     console.error("Error creating group:", error);
-    res.status(500).json({ error: "Failed to create group", details: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to create group", details: error.message });
   }
 });
 
@@ -165,35 +192,56 @@ router.get("/my-groups", authenticateUser, async (req, res) => {
       .innerJoin(groupsTable, eq(groupMembersTable.groupId, groupsTable.id))
       .where(eq(groupMembersTable.userId, req.userId));
 
-    // Get last message for each group
-    const groupsWithLastMessage = await Promise.all(
-      userGroups.map(async (group) => {
-        const [lastMessage] = await db
-          .select({
-            content: messagesTable.content,
-            createdAt: messagesTable.createdAt,
-            senderId: messagesTable.senderId,
-            senderName: usersTable.name,
-            senderUserName: usersTable.userName,
-          })
-          .from(messagesTable)
-          .innerJoin(usersTable, eq(messagesTable.senderId, usersTable.id))
-          .where(eq(messagesTable.groupId, group.id))
-          .orderBy(desc(messagesTable.createdAt))
-          .limit(1);
+    // Extract group IDs
+    const groupIds = userGroups.map((g) => g.id);
 
-        return {
-          ...group,
-          lastMessage: lastMessage || null,
-          unreadCount: 0, // Placeholder for now - group unread is per-user tracking
-        };
-      })
-    );
+    // Map for last messages
+    const lastMessageMap = new Map();
+
+    // Fetch last messages for ALL these groups in ONE query if groups exist
+    if (groupIds.length > 0) {
+      // Use raw SQL for DISTINCT ON performance
+      // joining with users to get sender details
+      const result = await db.execute(sql`
+        SELECT DISTINCT ON (m."group_id") 
+          m."content", 
+          m."created_at", 
+          m."sender_id", 
+          m."group_id",
+          u."name" as "senderName", 
+          u."user_name" as "senderUserName"
+        FROM ${messagesTable} m
+        JOIN ${usersTable} u ON m."sender_id" = u."id"
+        WHERE ${inArray(sql`m."group_id"`, groupIds)}
+        ORDER BY m."group_id", m."created_at" DESC
+      `);
+
+      // Process results
+      // Drizzle execute returns strict result object in newer versions, rows property contains data
+      const rows = result.rows || [];
+
+      rows.forEach((msg) => {
+        // Map snake_case headers to the object structure expected by frontend
+        lastMessageMap.set(msg.group_id, {
+          content: msg.content,
+          createdAt: msg.created_at,
+          senderId: msg.sender_id,
+          senderName: msg.senderName, // Aliased in SQL
+          senderUserName: msg.senderUserName, // Aliased in SQL
+        });
+      });
+    }
+
+    const groupsWithLastMessage = userGroups.map((group) => ({
+      ...group,
+      lastMessage: lastMessageMap.get(group.id) || null,
+      unreadCount: 0, // Placeholder
+    }));
 
     res.json({ groups: groupsWithLastMessage });
   } catch (error) {
     console.error("Error fetching groups:", error);
-    res.status(500).json({ error: "Failed to fetch groups" });
+    res.status(500).json({ error: "Failed to fetch groups", details: error.message });
   }
 });
 
@@ -312,11 +360,14 @@ router.post("/:groupId/messages", authenticateUser, async (req, res) => {
       return res.status(403).json({ error: "Not a member of this group" });
     }
 
-    const [message] = await db.insert(messagesTable).values({
-      groupId,
-      senderId: req.userId,
-      content,
-    }).returning();
+    const [message] = await db
+      .insert(messagesTable)
+      .values({
+        groupId,
+        senderId: req.userId,
+        content,
+      })
+      .returning();
 
     res.status(201).json({ message });
   } catch (error) {
@@ -331,7 +382,9 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
     const { groupId } = req.params;
     const { userId } = req.body;
 
-    console.log(`\n👥 [ADD MEMBER] Admin ${req.userId} adding member ${userId} to group ${groupId}`);
+    console.log(
+      `\n👥 [ADD MEMBER] Admin ${req.userId} adding member ${userId} to group ${groupId}`
+    );
 
     // Validate inputs
     if (!userId) {
@@ -375,7 +428,9 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
       );
 
     if (existingMembership) {
-      return res.status(400).json({ error: "User is already a member of this group" });
+      return res
+        .status(400)
+        .json({ error: "User is already a member of this group" });
     }
 
     // Add new member
@@ -393,8 +448,10 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
     // Broadcast member added event
     if (req.io) {
       // 📢 ROOM-BASED BROADCAST: Notify the group and the specific user
-      console.log(`📢 [BROADCAST] Notifying room user:${userId} and group:${groupId}`);
-      
+      console.log(
+        `📢 [BROADCAST] Notifying room user:${userId} and group:${groupId}`
+      );
+
       // Get full group details to send to the new member
       const [groupDetails] = await db
         .select()
@@ -406,12 +463,12 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
         userId,
         addedBy: req.userId,
         group: groupDetails,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Notify the specific user being added (all their tabs)
       req.io.to(`user:${userId}`).emit("group_member_added", eventData);
-      
+
       // Notify the group room members
       req.io.to(`group:${groupId}`).emit("group_member_added", eventData);
     }
@@ -421,8 +478,8 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
       member: {
         id: userId,
         role: "member",
-        joinedAt: newMember.joinedAt
-      }
+        joinedAt: newMember.joinedAt,
+      },
     });
   } catch (error) {
     console.error("Error adding member:", error);
@@ -431,75 +488,87 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
 });
 
 // Remove member from group (admin only)
-router.delete("/:groupId/members/:userId", authenticateUser, async (req, res) => {
-  try {
-    const { groupId, userId } = req.params;
+router.delete(
+  "/:groupId/members/:userId",
+  authenticateUser,
+  async (req, res) => {
+    try {
+      const { groupId, userId } = req.params;
 
-    console.log(`\n🗑️ [REMOVE MEMBER] Admin ${req.userId} removing member ${userId} from group ${groupId}`);
-
-    // Check if requester is admin
-    const [requesterMembership] = await db
-      .select()
-      .from(groupMembersTable)
-      .where(
-        and(
-          eq(groupMembersTable.groupId, groupId),
-          eq(groupMembersTable.userId, req.userId)
-        )
+      console.log(
+        `\n🗑️ [REMOVE MEMBER] Admin ${req.userId} removing member ${userId} from group ${groupId}`
       );
 
-    if (!requesterMembership || requesterMembership.role !== "admin") {
-      return res.status(403).json({ error: "Only admins can remove members" });
-    }
+      // Check if requester is admin
+      const [requesterMembership] = await db
+        .select()
+        .from(groupMembersTable)
+        .where(
+          and(
+            eq(groupMembersTable.groupId, groupId),
+            eq(groupMembersTable.userId, req.userId)
+          )
+        );
 
-    // Cannot remove group creator
-    const [group] = await db
-      .select()
-      .from(groupsTable)
-      .where(eq(groupsTable.id, groupId));
+      if (!requesterMembership || requesterMembership.role !== "admin") {
+        return res
+          .status(403)
+          .json({ error: "Only admins can remove members" });
+      }
 
-    if (group.createdBy === userId) {
-      return res.status(400).json({ error: "Cannot remove group creator" });
-    }
+      // Cannot remove group creator
+      const [group] = await db
+        .select()
+        .from(groupsTable)
+        .where(eq(groupsTable.id, groupId));
 
-    // Remove member
-    const [removedMember] = await db
-      .delete(groupMembersTable)
-      .where(
-        and(
-          eq(groupMembersTable.groupId, groupId),
-          eq(groupMembersTable.userId, userId)
+      if (group.createdBy === userId) {
+        return res.status(400).json({ error: "Cannot remove group creator" });
+      }
+
+      // Remove member
+      const [removedMember] = await db
+        .delete(groupMembersTable)
+        .where(
+          and(
+            eq(groupMembersTable.groupId, groupId),
+            eq(groupMembersTable.userId, userId)
+          )
         )
-      )
-      .returning();
+        .returning();
 
-    if (!removedMember) {
-      return res.status(404).json({ error: "Member not found in this group" });
+      if (!removedMember) {
+        return res
+          .status(404)
+          .json({ error: "Member not found in this group" });
+      }
+
+      console.log(`✅ [REMOVE MEMBER] Member removed successfully`);
+
+      // 📢 ROOM-BASED BROADCAST: Notify the group and the specific user
+      if (req.io) {
+        console.log(
+          `📢 [BROADCAST] Notifying removal to room user:${userId} and group:${groupId}`
+        );
+        const eventData = {
+          groupId,
+          userId,
+          removedBy: req.userId,
+          timestamp: new Date().toISOString(),
+        };
+        // Notify the user themselves
+        req.io.to(`user:${userId}`).emit("group_member_removed", eventData);
+        // Notify the current group members
+        req.io.to(`group:${groupId}`).emit("group_member_removed", eventData);
+      }
+
+      res.json({ message: "Member removed successfully" });
+    } catch (error) {
+      console.error("Error removing member:", error);
+      res.status(500).json({ error: "Failed to remove member" });
     }
-
-    console.log(`✅ [REMOVE MEMBER] Member removed successfully`);
-
-    // 📢 ROOM-BASED BROADCAST: Notify the group and the specific user
-    if (req.io) {
-      console.log(`📢 [BROADCAST] Notifying removal to room user:${userId} and group:${groupId}`);
-      const eventData = {
-        groupId,
-        userId,
-        removedBy: req.userId,
-        timestamp: new Date().toISOString()
-      };
-      // Notify the user themselves
-      req.io.to(`user:${userId}`).emit("group_member_removed", eventData);
-      // Notify the current group members
-      req.io.to(`group:${groupId}`).emit("group_member_removed", eventData);
-    }
-
-    res.json({ message: "Member removed successfully" });
-  } catch (error) {
-    console.error("Error removing member:", error);
-    res.status(500).json({ error: "Failed to remove member" });
   }
-});
+);
 
 // User exits group
 router.post("/:groupId/exit", authenticateUser, async (req, res) => {
@@ -531,7 +600,11 @@ router.post("/:groupId/exit", authenticateUser, async (req, res) => {
       .where(eq(groupsTable.id, groupId));
 
     if (group.createdBy === userId) {
-      return res.status(400).json({ error: "Group creator cannot exit. Delete the group instead." });
+      return res
+        .status(400)
+        .json({
+          error: "Group creator cannot exit. Delete the group instead.",
+        });
     }
 
     // Remove user from group
@@ -554,7 +627,7 @@ router.post("/:groupId/exit", authenticateUser, async (req, res) => {
         userId,
         removedBy: userId, // Self-removed
         reason: "exit",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
 
@@ -570,7 +643,9 @@ router.delete("/:groupId", authenticateUser, async (req, res) => {
   try {
     const { groupId } = req.params;
 
-    console.log(`\n🗑️ [DELETE GROUP] User ${req.userId} attempting to delete group ${groupId}`);
+    console.log(
+      `\n🗑️ [DELETE GROUP] User ${req.userId} attempting to delete group ${groupId}`
+    );
 
     // Check if user is admin/creator
     const [group] = await db
@@ -583,13 +658,13 @@ router.delete("/:groupId", authenticateUser, async (req, res) => {
     }
 
     if (group.createdBy !== req.userId) {
-      return res.status(403).json({ error: "Only group creator can delete the group" });
+      return res
+        .status(403)
+        .json({ error: "Only group creator can delete the group" });
     }
 
     // Delete all messages in group
-    await db
-      .delete(messagesTable)
-      .where(eq(messagesTable.groupId, groupId));
+    await db.delete(messagesTable).where(eq(messagesTable.groupId, groupId));
 
     // Delete all members
     await db

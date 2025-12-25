@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useDebounce } from "@/hooks/useDebounce";
 
 /**
  * Reusable modal component for adding new conversations
@@ -33,6 +34,7 @@ const AddNewConversationModal = ({
   isLoading = false,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
 
   // Get users not in current chat list (neither hasChat nor addedForChat)
   const availableUsers = useMemo(() => {
@@ -53,16 +55,16 @@ const AddNewConversationModal = ({
 
   // Filter available users based on search
   const filteredUsers = useMemo(() => {
-    if (!searchQuery.trim()) return availableUsers;
+    if (!debouncedSearchQuery.trim()) return availableUsers;
 
-    const query = searchQuery.toLowerCase();
+    const query = debouncedSearchQuery.toLowerCase();
     return availableUsers.filter(
       (user) =>
         user.userName?.toLowerCase().includes(query) ||
         user.name?.toLowerCase().includes(query) ||
         user.email?.toLowerCase().includes(query)
     );
-  }, [searchQuery, availableUsers]);
+  }, [debouncedSearchQuery, availableUsers]);
 
   const handleUserSelect = (user) => {
     console.log("📝 [ADD CONVERSATION] User selected:", user.name || user.userName);
