@@ -353,10 +353,8 @@ const HomePage = () => {
                 className="mobileNav fixed left-0 top-0 min-w-[300px] min-h-full z-20 shadow-2xl bg-white"
                 ref={menuRef}
               >
-                <div className="w-full text-center mt-10">
-                  <h2 className="text-3xl font-bold text-slate-800">
-                    VibeMesh
-                  </h2>
+                <div className="w-full flex justify-center mt-10">
+                  <Logo showText={true} textClassName="text-3xl font-bold text-slate-800" className="w-12 h-12" />
                 </div>
                 <div className="navLinks mt-10 p-3 flex items-center justify-center">
                   <ul className="flex flex-col gap-10">
@@ -685,9 +683,7 @@ const HomePage = () => {
                     <span className="inline-block px-4 py-2 bg-gradient-to-r from-primaryColor/30 to-secondaryColor/30 rounded-full text-sm font-semibold text-slate-700 mb-4">
                       Welcome to the future of chat
                     </span>
-                    <h1 className="lg:text-7xl md:text-6xl text-5xl font-bold my-6 leading-tight text-[#040316]">
-                      VibeMesh
-                    </h1>
+                    <Logo showText={true} textClassName="lg:text-7xl md:text-6xl text-5xl font-bold my-6 leading-tight text-[#040316]" className="w-20 h-20 md:w-24 md:h-24" />
                     <p className="text-xl text-slate-600 font-medium mb-2">
                       Weaving seamless connections
                     </p>

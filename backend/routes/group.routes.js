@@ -80,12 +80,16 @@ router.post("/create", authenticateUser, async (req, res) => {
   try {
     const { name, description, memberIds = [] } = req.body;
 
+    console.log(`\n📁 [CREATE GROUP] User ${req.userId} creating group "${name}" with ${memberIds.length} members`);
+
     // Create group
     const [newGroup] = await db.insert(groupsTable).values({
       name,
       description,
       createdBy: req.userId,
     }).returning();
+
+    console.log(`✅ Group created with ID: ${newGroup.id}`);
 
     // Add creator as admin
     await db.insert(groupMembersTable).values({
@@ -104,8 +108,42 @@ router.post("/create", authenticateUser, async (req, res) => {
       await db.insert(groupMembersTable).values(memberValues);
     }
 
+    // Get full group details with last message for response
+    const groupWithDetails = {
+      ...newGroup,
+      role: "admin",
+      lastMessage: null,
+      unreadCount: 0
+    };
+
+    // 🔔 CRITICAL: Emit socket events to notify all members
+    if (req.io) {
+      console.log(`📢 [SOCKET] Notifying members about new group`);
+      
+      // All member IDs including creator
+      const allMemberIds = [req.userId, ...memberIds];
+      
+      // Notify each member individually via their personal room
+      allMemberIds.forEach((memberId) => {
+        const memberRole = memberId === req.userId ? "admin" : "member";
+        const groupDataForMember = {
+          ...newGroup,
+          role: memberRole,
+          lastMessage: null,
+          unreadCount: 0
+        };
+        
+        console.log(`   🔔 Notifying user ${memberId} (${memberRole}) via room: user:${memberId}`);
+        req.io.to(`user:${memberId}`).emit("added_to_group", groupDataForMember);
+      });
+      
+      console.log(`✅ Notified ${allMemberIds.length} members about group creation`);
+    } else {
+      console.warn(`⚠️  Socket.io not available, members won't be notified in real-time`);
+    }
+
     // Return group with memberIds for socket event
-    res.status(201).json({ group: newGroup, memberIds });
+    res.status(201).json({ group: groupWithDetails, memberIds });
   } catch (error) {
     console.error("Error creating group:", error);
     res.status(500).json({ error: "Failed to create group", details: error.message });
@@ -354,7 +392,8 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
 
     // Broadcast member added event
     if (req.io) {
-      console.log(`\n📢 [BROADCAST] User ${userId} added to group ${groupId}`);
+      // 📢 ROOM-BASED BROADCAST: Notify the group and the specific user
+      console.log(`📢 [BROADCAST] Notifying room user:${userId} and group:${groupId}`);
       
       // Get full group details to send to the new member
       const [groupDetails] = await db
@@ -362,13 +401,19 @@ router.post("/:groupId/members", authenticateUser, async (req, res) => {
         .from(groupsTable)
         .where(eq(groupsTable.id, groupId));
 
-      req.io.emit("group_member_added", {
+      const eventData = {
         groupId,
         userId,
         addedBy: req.userId,
         group: groupDetails,
         timestamp: new Date().toISOString()
-      });
+      };
+
+      // Notify the specific user being added (all their tabs)
+      req.io.to(`user:${userId}`).emit("group_member_added", eventData);
+      
+      // Notify the group room members
+      req.io.to(`group:${groupId}`).emit("group_member_added", eventData);
     }
 
     res.status(201).json({
@@ -434,15 +479,19 @@ router.delete("/:groupId/members/:userId", authenticateUser, async (req, res) =>
 
     console.log(`✅ [REMOVE MEMBER] Member removed successfully`);
 
-    // Broadcast member removed event
+    // 📢 ROOM-BASED BROADCAST: Notify the group and the specific user
     if (req.io) {
-      console.log(`\n📢 [BROADCAST] User ${userId} removed from group ${groupId}`);
-      req.io.emit("group_member_removed", {
+      console.log(`📢 [BROADCAST] Notifying removal to room user:${userId} and group:${groupId}`);
+      const eventData = {
         groupId,
         userId,
         removedBy: req.userId,
         timestamp: new Date().toISOString()
-      });
+      };
+      // Notify the user themselves
+      req.io.to(`user:${userId}`).emit("group_member_removed", eventData);
+      // Notify the current group members
+      req.io.to(`group:${groupId}`).emit("group_member_removed", eventData);
     }
 
     res.json({ message: "Member removed successfully" });
@@ -497,10 +546,10 @@ router.post("/:groupId/exit", authenticateUser, async (req, res) => {
 
     console.log(`✅ [EXIT GROUP] User exited successfully`);
 
-    // Broadcast user exit event (treated same as removal but triggered by self)
+    // 📢 ROOM-BASED BROADCAST: Notify the group
     if (req.io) {
-      console.log(`\n📢 [BROADCAST] User ${userId} exited group ${groupId}`);
-      req.io.emit("group_member_removed", {
+      console.log(`📢 [BROADCAST] Notifying exit to group:${groupId}`);
+      req.io.to(`group:${groupId}`).emit("group_member_removed", {
         groupId,
         userId,
         removedBy: userId, // Self-removed

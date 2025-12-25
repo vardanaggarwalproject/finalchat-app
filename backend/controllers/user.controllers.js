@@ -1,6 +1,6 @@
 import { db } from "../config/db.js";
 import { usersTable, messagesTable, userContactsTable } from "../drizzle/schema.js";
-import { eq, and, or, desc, ne, isNull } from "drizzle-orm";
+import { eq, and, or, desc, ne, isNull, sql } from "drizzle-orm";
 
 export const getCurrentUser = async (req, res) => {
   try {
@@ -39,9 +39,12 @@ export const getCurrentUser = async (req, res) => {
 export const getAllUsers = async (req, res) => {
   try {
     const currentUserId = req.userId;
-    const activeUsers = req.activeUsers; // Get real-time active users map
+    const activeUsers = req.activeUsers;
 
-    // Get all users except current user
+    console.log(`\n🔍 [GET_ALL_USERS] Starting optimized fetch for User: ${currentUserId}`);
+    const startTime = Date.now();
+
+    // 1. Get all users except current user
     const users = await db
       .select({
         id: usersTable.id,
@@ -55,17 +58,48 @@ export const getAllUsers = async (req, res) => {
       .from(usersTable)
       .where(ne(usersTable.id, currentUserId));
 
-    // Override isOnline status with real-time data from activeUsers map
-    const usersWithRealtimeStatus = users.map((user) => ({
-      ...user,
-      isOnline: activeUsers && activeUsers.has(user.id), // True if user is in activeUsers map, false otherwise
-    }));
+    console.log(`   - Found ${users.length} other users in DB`);
 
-    console.log(` [GET_ALL_USERS] Total other users found in DB: ${users.length}`);
+    // 2. Fetch all contacts for this user in bulk
+    let userContacts = [];
+    try {
+      userContacts = await db
+        .select({ contactUserId: userContactsTable.contactUserId })
+        .from(userContactsTable)
+        .where(
+          and(
+            eq(userContactsTable.userId, currentUserId),
+            eq(userContactsTable.addedForChat, true)
+          )
+        );
+    } catch (err) {
+      console.warn("   ⚠️  Contacts table error (skipping):", err.message);
+    }
+    const contactIds = new Set(userContacts.map(c => String(c.contactUserId)));
 
-    // Get last message with each user AND check if they're added as contacts
-    const usersWithLastMessage = await Promise.all(
-      usersWithRealtimeStatus.map(async (user) => {
+    // 3. Fetch unread counts in bulk
+    const unreadCounts = await db
+      .select({
+        senderId: messagesTable.senderId,
+        count: sql`count(*)`.mapWith(Number)
+      })
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.receiverId, currentUserId),
+          eq(messagesTable.isRead, false),
+          isNull(messagesTable.groupId)
+        )
+      )
+      .groupBy(messagesTable.senderId);
+    
+    const unreadMap = new Map(unreadCounts.map(c => [String(c.senderId), c.count]));
+
+    // 4. Transform users and fetch last messages
+    // Note: Last message is still fetched individually but parallelized, or we could use a complex join
+    const usersWithMetadata = await Promise.all(
+      users.map(async (user) => {
+        // Fetch last message
         const [lastMessage] = await db
           .select({
             content: messagesTable.content,
@@ -91,61 +125,32 @@ export const getAllUsers = async (req, res) => {
           .orderBy(desc(messagesTable.createdAt))
           .limit(1);
 
-        // Count unread messages
-        const unreadMessages = await db
-          .select()
-          .from(messagesTable)
-          .where(
-            and(
-              eq(messagesTable.senderId, user.id),
-              eq(messagesTable.receiverId, currentUserId),
-              eq(messagesTable.isRead, false),
-              isNull(messagesTable.groupId)
-            )
-          );
-
-        // Check if user is added as contact
-        let addedForChat = false;
-        try {
-          const [contact] = await db
-            .select()
-            .from(userContactsTable)
-            .where(
-              and(
-                eq(userContactsTable.userId, currentUserId),
-                eq(userContactsTable.contactUserId, user.id),
-                eq(userContactsTable.addedForChat, true)
-              )
-            );
-
-          addedForChat = !!contact;
-        } catch (contactError) {
-          // Table might not exist yet - that's okay, just treat as no contacts
-          console.warn(`⚠️  Could not check contacts (table may not exist):`, contactError.message);
-          addedForChat = false;
-        }
-
+        const userIdStr = String(user.id);
         const hasChat = !!lastMessage;
+        const addedForChat = contactIds.has(userIdStr);
 
         return {
           ...user,
+          isOnline: activeUsers ? activeUsers.has(userIdStr) : user.isOnline,
           lastMessage: lastMessage || null,
-          unreadCount: unreadMessages.length,
-          hasChat, // true if user has chat history
-          addedForChat, // true if user was added as contact
+          unreadCount: unreadMap.get(userIdStr) || 0,
+          hasChat,
+          addedForChat
         };
       })
     );
 
-    console.log(` [GET_ALL_USERS] Returning ${usersWithLastMessage.length} users with properties:`);
-    usersWithLastMessage.forEach(u => {
-      console.log(`   - ${u.userName}: hasChat=${u.hasChat}, addedForChat=${u.addedForChat}, unread=${u.unreadCount}`);
-    });
-
-    res.status(200).json({ users: usersWithLastMessage });
+    const endTime = Date.now();
+    console.log(`✅ [GET_ALL_USERS] Completed in ${endTime - startTime}ms`);
+    
+    res.status(200).json({ users: usersWithMetadata });
   } catch (error) {
-    console.error("Get all users error:", error);
-    res.status(500).json({ message: "Error fetching users" });
+    console.error("❌ [GET_ALL_USERS] CRITICAL ERROR:", error);
+    res.status(500).json({ 
+      message: "Error fetching users", 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

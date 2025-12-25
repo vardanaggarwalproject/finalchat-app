@@ -1,6 +1,8 @@
+import dotenv from "dotenv";
+dotenv.config({path: ".env.production"});
+
 import express from "express";
 import { createServer } from 'node:http';
-import dotenv from "dotenv";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { db } from "./config/db.js";
@@ -14,8 +16,6 @@ import authRouter from "./routes/auth.routes.js";
 import userRouter, { setIOMiddleware } from "./routes/user.routes.js";
 import groupRouter from "./routes/group.routes.js";
 import messageRouter from "./routes/message.routes.js";
-
-dotenv.config({path: ".env.production"});
 
 const app = express();
 const server = createServer(app);
@@ -178,8 +178,22 @@ io.on('connection', async (socket) => {
   // Handle joining a group
   socket.on("join_group", async (data) => {
     const { groupId } = data;
-    socket.join(`group:${groupId}`);
-    console.log(`📥 [JOIN_GROUP] User ${userId} explicitly joined group ${groupId}`);
+    console.log(`📥 [JOIN_GROUP] Request from Socket ${socket.id} (User ${userId}) to join Group ${groupId}`);
+    
+    if (!groupId) {
+      console.warn(`⚠️ [JOIN_GROUP] Invalid groupId received:`, data);
+      return;
+    }
+
+    // Check if room already has this socket
+    const existingRooms = socket.rooms;
+    if (existingRooms.has(`group:${groupId}`)) {
+      console.log(`   ℹ️ User ${userId} is ALREADY in group ${groupId}`);
+    } else {
+      socket.join(`group:${groupId}`);
+      const socketsInRoom = await io.in(`group:${groupId}`).fetchSockets();
+      console.log(`   ✅ User ${userId} joined room group:${groupId}. Total sockets: ${socketsInRoom.length}`);
+    }
 
     socket.to(`group:${groupId}`).emit("user_joined_group", {
       userId,
@@ -337,22 +351,24 @@ io.on('connection', async (socket) => {
         senderImage: sender.image,
       };
 
-      // Broadcast to all OTHER users in the group (excluding sender)
-      // Sender already has the message from optimistic UI update
-      console.log(`📢 Broadcasting to other users in group: group:${groupId}`);
+      // Broadcast to ALL users in the group (including sender tabs)
+      // Frontend handles duplicate message filtering by ID
+      console.log(`📢 Broadcasting to all members in group: group:${groupId}`);
       
-      // Get all sockets in this group room for debugging
       const socketsInRoom = await io.in(`group:${groupId}`).fetchSockets();
-      console.log(`   👥 Total sockets in group room: ${socketsInRoom.length}`);
-      console.log(`   👥 Socket IDs in room: ${socketsInRoom.map(s => s.id.substring(0, 8)).join(", ")}`);
-      console.log(`   📤 Broadcasting to ${socketsInRoom.length - 1} other members (excluding sender)`);
+      console.log(`   👥 Total member sockets in room: ${socketsInRoom.length}`);
       
-      socket.broadcast.to(`group:${groupId}`).emit("receive_group_message", messageData);
+      // Log each socket in the room
+      socketsInRoom.forEach((s, index) => {
+        const socketUserId = socketToUser.get(s.id);
+        console.log(`   ${index + 1}. Socket ${s.id.substring(0, 8)}... → User ${socketUserId}`);
+      });
+      
+      io.to(`group:${groupId}`).emit("receive_group_message", messageData);
 
-      // Confirm to sender that message was sent and saved with full message data
-      // This allows the frontend to replace the optimistic message with the confirmed message
+      // Confirm to sender that message was sent and saved
       socket.emit("message_sent", messageData);
-      console.log(`✅ Group message broadcasted successfully to ${socketsInRoom.length - 1} members\n`);
+      console.log(`✅ Group message broadcasted successfully to ${socketsInRoom.length} sockets in room group:${groupId}\n`);
 
     } catch (error) {
       console.error(`❌ Error in send_group_message:`, error.message);
@@ -395,18 +411,14 @@ io.on('connection', async (socket) => {
   socket.on("group_created", async (data) => {
     const { group, memberIds } = data;
 
-    // console.log(`📁 Broadcasting group creation to members:`, memberIds);
-
-    // Emit to each member
+    // Emit to each member's personal room
     if (memberIds && memberIds.length > 0) {
       memberIds.forEach((memberId) => {
-        const memberSocketId = activeUsers.get(memberId);
-        if (memberSocketId && memberSocketId !== socket.id) {
-          io.to(memberSocketId).emit("added_to_group", {
-            ...group,
-            role: "member",
-          });
-        }
+        console.log(`🔔 Sending group notification to room: user:${memberId}`);
+        io.to(`user:${memberId}`).emit("added_to_group", {
+          ...group,
+          role: "member",
+        });
       });
     }
   });
@@ -559,6 +571,36 @@ app.get("/debug/socket-info", (req, res) => {
     connectedClients: io.engine.clientsCount,
     activeUsersInMap: activeUsers.size
   });
+});
+
+// Debug endpoint - socket rooms membership
+app.get("/debug/socket-rooms", async (req, res) => {
+  try {
+    const roomsData = {};
+    
+    // Get all sockets
+    const allSockets = await io.fetchSockets();
+    
+    // Iterate through each socket and collect room info
+    for (const socket of allSockets) {
+      const userId = socketToUser.get(socket.id);
+      const rooms = Array.from(socket.rooms).filter(room => room !== socket.id); // Exclude default room
+      
+      roomsData[socket.id.substring(0, 12) + "..."] = {
+        userId: userId || "unknown",
+        rooms: rooms
+      };
+    }
+    
+    res.json({
+      message: "Socket room membership",
+      totalSockets: allSockets.length,
+      sockets: roomsData,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 server.listen(PORT, () => {

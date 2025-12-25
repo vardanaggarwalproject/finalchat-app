@@ -1,0 +1,85 @@
+import React, { useState } from 'react';
+import { useChat } from '../../../context/ChatContext';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Camera, Loader2 } from "lucide-react";
+import axiosInstance from '../../../utils/axiosConfig';
+
+const EditProfileModal = ({ isOpen, onClose }) => {
+  const { currentUser, setCurrentUser } = useChat();
+  const [name, setName] = useState(currentUser?.name || currentUser?.userName || "");
+  const [email, setEmail] = useState(currentUser?.email || "");
+  const [image, setImage] = useState(currentUser?.image || "");
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdate = async () => {
+    setLoading(true);
+    try {
+      const response = await axiosInstance.put('/api/user/update', {
+        name: name.trim(),
+        email: email.trim(),
+        image
+      });
+      const updatedUser = { ...currentUser, ...response.data.user };
+      setCurrentUser(updatedUser);
+      localStorage.setItem("user", JSON.stringify(updatedUser));
+      onClose();
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      alert("Failed to update profile");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Edit Profile</DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6 py-4">
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative group">
+              <Avatar className="w-24 h-24 border-4 border-slate-100 shadow-xl">
+                <AvatarImage src={image} />
+                <AvatarFallback className="text-2xl">{currentUser?.userName?.substring(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                <Camera className="w-8 h-8 text-white" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ename">Display Name</Label>
+              <Input id="ename" value={name} onChange={e => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eemail">Email Address</Label>
+              <Input id="eemail" value={email} onChange={e => setEmail(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="eimage">Avatar URL</Label>
+              <Input id="eimage" value={image} onChange={e => setImage(e.target.value)} placeholder="https://..." />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button onClick={handleUpdate} disabled={loading}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default EditProfileModal;
