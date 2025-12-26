@@ -153,7 +153,7 @@ const GroupMembersModal = ({ isOpen, onClose, group }) => {
                     <Avatar className="w-10 h-10 border shadow-sm">
                       <AvatarImage src={member.image} />
                       <AvatarFallback className="text-white bg-slate-400 font-semibold text-xs sm:text-sm">
-                        {getInitials(member.name || member.userName)}
+                        {getInitials(member.name)}
                       </AvatarFallback>
                     </Avatar>
                     {member.isOnline && (
@@ -162,7 +162,7 @@ const GroupMembersModal = ({ isOpen, onClose, group }) => {
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <p className="font-semibold text-slate-800 text-xs sm:text-sm truncate">
-                      {member.name || member.userName}
+                      {member.name}
                     </p>
                     <p className="text-xs text-slate-500 truncate">
                       {member.email}

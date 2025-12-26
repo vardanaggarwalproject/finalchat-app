@@ -178,7 +178,7 @@ const AddGroupMembersModal = ({
                             alt="User Avatar"
                           />
                           <AvatarFallback className="bg-slate-100 text-slate-500 font-semibold text-xs sm:text-sm border-none shadow-none">
-                            {getInitials(user.name || user.userName)}
+                            {getInitials(user.name)}
                           </AvatarFallback>
                         </Avatar>
                         {user.isOnline && (
@@ -189,7 +189,7 @@ const AddGroupMembersModal = ({
                       {/* User Info */}
                       <div className="flex-1 text-left min-w-0">
                         <p className="font-semibold text-slate-800 text-xs sm:text-sm truncate">
-                          {user.name || user.userName}
+                          {user.name}
                         </p>
                         <p className="text-xs text-slate-500 truncate">
                           {user.email}
@@ -233,7 +233,7 @@ const AddGroupMembersModal = ({
                             alt="User Avatar"
                           />
                           <AvatarFallback className="bg-slate-100 text-slate-500 font-semibold text-xs sm:text-sm border-none shadow-none">
-                            {getInitials(member.name || member.userName)}
+                            {getInitials(member.name)}
                           </AvatarFallback>
                         </Avatar>
                         {member.isOnline && (
@@ -244,7 +244,7 @@ const AddGroupMembersModal = ({
                       {/* User Info */}
                       <div className="flex-1 text-left min-w-0">
                         <p className="font-semibold text-slate-800 text-xs sm:text-sm truncate">
-                          {member.name || member.userName}
+                          {member.name}
                         </p>
                         <p className="text-xs text-slate-500 truncate">
                           {member.email}

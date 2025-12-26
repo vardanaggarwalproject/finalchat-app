@@ -256,7 +256,6 @@ io.on('connection', async (socket) => {
         .select({
           id: usersTable.id,
           name: usersTable.name,
-          userName: usersTable.userName,
           image: usersTable.image,
         })
         .from(usersTable)
@@ -265,7 +264,6 @@ io.on('connection', async (socket) => {
       const messageData = {
         ...savedMessage,
         senderName: sender.name,
-        senderUserName: sender.userName,
         senderImage: sender.image,
       };
 

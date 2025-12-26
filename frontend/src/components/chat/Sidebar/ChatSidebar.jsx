@@ -154,10 +154,10 @@ const ChatSidebar = () => {
               <div className="relative">
                 <Avatar className="w-12 h-12 border-2 border-white shadow-sm">
                   {currentUser?.image ? (
-                    <AvatarImage src={currentUser.image} alt={currentUser.userName} />
+                    <AvatarImage src={currentUser.image} alt={currentUser.name} />
                   ) : (
                     <AvatarFallback className="bg-primaryColor/10 text-primaryColor font-bold">
-                       {getInitials(currentUser?.name || currentUser?.userName)}
+                       {getInitials(currentUser?.name)}
                     </AvatarFallback>
                   )}
                 </Avatar>
@@ -165,7 +165,7 @@ const ChatSidebar = () => {
               </div>
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="font-black text-slate-900 truncate text-[14px]">{currentUser?.name || currentUser?.userName}</span>
+                  <span className="font-black text-slate-900 truncate text-[14px]">{currentUser?.name}</span>
                   <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />
                 </div>
                 <span className="text-[11px] text-slate-400 font-bold truncate">{currentUser?.email || "No email provided"}</span>
@@ -269,13 +269,13 @@ const ChatSidebar = () => {
                   <div className="relative">
                     <Avatar className={`w-[52px] h-[52px] border-2 shadow-sm transition-all duration-500 ${selectedUser?.id === user.id ? 'border-primaryColor' : 'border-white group-hover:border-slate-200'}`}>
                       <AvatarImage src={user.image} />
-                      <AvatarFallback className="bg-slate-100 text-slate-400 font-black text-sm">{getInitials(user.name || user.userName)}</AvatarFallback>
+                      <AvatarFallback className="bg-slate-100 text-slate-400 font-black text-sm">{getInitials(user.name)}</AvatarFallback>
                     </Avatar>
                     {user.isOnline && <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-lg" />}
                   </div>
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex justify-between items-start mb-0.5">
-                      <span className={`font-black truncate text-[15px] ${selectedUser?.id === user.id ? 'text-slate-900' : 'text-slate-800'}`}>{user.name || user.userName}</span>
+                      <span className={`font-black truncate text-[15px] ${selectedUser?.id === user.id ? 'text-slate-900' : 'text-slate-800'}`}>{user.name}</span>
                       {user.lastMessage && <span className="text-[10px] font-bold text-slate-400 whitespace-nowrap pt-1">{formatTimeAgo(user.lastMessage.createdAt)}</span>}
                     </div>
                     <div className="flex justify-between items-center gap-2">

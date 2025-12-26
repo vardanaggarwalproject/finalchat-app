@@ -27,6 +27,16 @@ const MessageSkeleton = ({ side }) => (
   </div>
 );
 
+const getInitials = (name) => {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
 const MessageList = () => {
   const { activeMessages, currentUser, loadingMessages, pendingSelection, selectedUser, selectedGroup } = useChat();
   const scrollRef = useRef(null);
@@ -135,7 +145,7 @@ const MessageList = () => {
                           {showAvatar && !isMe && (
                             <Avatar className="w-9 h-9 border-2 border-white shadow-md ring-2 ring-primaryColor/10">
                               <AvatarImage src={msg.senderImage} />
-                              <AvatarFallback className="text-[10px] bg-slate-100 font-black text-slate-400">{msg.senderUserName?.substring(0, 2).toUpperCase()}</AvatarFallback>
+                              <AvatarFallback className="text-[10px] bg-slate-100 font-black text-slate-400">{getInitials(msg.senderName)}</AvatarFallback>
                             </Avatar>
                           )}
                         </div>
