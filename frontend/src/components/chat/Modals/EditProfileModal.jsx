@@ -8,6 +8,16 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Camera, Loader2 } from "lucide-react";
 import axiosInstance from '../../../utils/axiosConfig';
 
+const getInitials = (name) => {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+};
+
 const EditProfileModal = ({ isOpen, onClose }) => {
   const { currentUser, setCurrentUser } = useChat();
   const [name, setName] = useState(currentUser?.name || currentUser?.userName || "");
@@ -47,7 +57,7 @@ const EditProfileModal = ({ isOpen, onClose }) => {
             <div className="relative group">
               <Avatar className="w-24 h-24 border-4 border-slate-100 shadow-xl">
                 <AvatarImage src={image} />
-                <AvatarFallback className="text-2xl">{currentUser?.userName?.substring(0, 2).toUpperCase()}</AvatarFallback>
+                <AvatarFallback className="text-2xl">{getInitials(currentUser?.name || currentUser?.userName)}</AvatarFallback>
               </Avatar>
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                 <Camera className="w-8 h-8 text-white" />
