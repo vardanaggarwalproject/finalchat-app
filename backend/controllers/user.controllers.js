@@ -231,7 +231,13 @@ export const updateUserProfile = async (req, res) => {
 
     // Build update object with only provided fields
     const updateData = {};
-    if (name !== undefined && name.trim() !== "") updateData.name = name.trim();
+    // Validate name if provided
+    if (name !== undefined && name.trim() !== "") {
+      if (name.trim().length < 2 || name.trim().length > 20) {
+        return res.status(400).json({ message: "Name must be between 2 and 20 characters long" });
+      }
+      updateData.name = name.trim();
+    }
     if (email !== undefined && email.trim() !== "") updateData.email = email.trim();
     if (image !== undefined && image.trim() !== "") updateData.image = image.trim();
     updateData.updatedAt = new Date();

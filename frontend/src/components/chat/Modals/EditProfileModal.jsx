@@ -26,6 +26,18 @@ const EditProfileModal = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
 
   const handleUpdate = async () => {
+    // Basic validation
+    if (name.trim().length < 2 || name.trim().length > 20) {
+      toast.error("Invalid Name", { description: "Name must be between 2 and 20 characters long." });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (email.trim() !== "" && !emailRegex.test(email.trim())) {
+      toast.error("Invalid Email", { description: "Please enter a valid email address." });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await axiosInstance.put('/api/user/update', {
@@ -68,7 +80,7 @@ const EditProfileModal = ({ isOpen, onClose }) => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="ename">Display Name</Label>
-              <Input id="ename" value={name} onChange={e => setName(e.target.value)} />
+              <Input id="ename" value={name} onChange={e => setName(e.target.value)} maxLength={20} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="eemail">Email Address</Label>
