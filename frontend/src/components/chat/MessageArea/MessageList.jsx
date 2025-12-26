@@ -43,7 +43,7 @@ const MessageList = () => {
   const messagesEndRef = useRef(null);
   const lastMessageCount = useRef(0);
   const lastChatId = useRef(null);
-
+  
   const currentChatId = selectedUser?.id || selectedGroup?.id;
 
   const scrollToBottom = (behavior = 'smooth') => {
@@ -77,7 +77,7 @@ const MessageList = () => {
         lastMessageCount.current = 0;
     }
   }, [activeMessages, loadingMessages, pendingSelection, currentChatId]);
-
+  
   if (!selectedUser && !selectedGroup) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-transparent text-center">
@@ -129,8 +129,8 @@ const MessageList = () => {
             ) : (
               <>
                 {activeMessages.map((msg, index) => {
-                  const isMe = String(msg.senderId) === String(currentUser?.id || currentUser?._id);
-                  const showAvatar = index === 0 || String(activeMessages[index - 1]?.senderId) !== String(msg.senderId);
+                  const isMe = String(msg.senderId).toLowerCase() === String(currentUser?.id || currentUser?._id).toLowerCase();
+                  const showAvatar = index === 0 || String(activeMessages[index - 1]?.senderId).toLowerCase() !== String(msg.senderId).toLowerCase();
                   const isLastFew = index >= activeMessages.length - 3;
 
                   return (
@@ -152,7 +152,7 @@ const MessageList = () => {
                         <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} gap-1`}>
                           {showAvatar && !isMe && selectedGroup && (
                             <span className="text-[10px] font-black text-slate-400 ml-1 uppercase tracking-widest">
-                              {msg.senderName || msg.senderUserName}
+                              {msg.senderName}
                             </span>
                           )}
                           <div className={`group relative px-4 py-2.5 rounded-[18px] text-[14px] shadow-sm transition-all hover:shadow-md ${

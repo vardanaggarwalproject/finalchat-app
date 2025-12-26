@@ -41,8 +41,8 @@ const AddGroupMembersModal = ({
   // Get users that are not in the group (for adding)
   const availableUsers = useMemo(() => {
     console.log("🔍 [ADD MEMBERS MODAL] Calculating available users");
-    const memberIds = new Set(groupMembers.map((m) => m.id));
-    const available = allUsers.filter((user) => !memberIds.has(user.id));
+    const memberIds = new Set(groupMembers.map((m) => String(m.id).toLowerCase()));
+    const available = allUsers.filter((user) => !memberIds.has(String(user.id).toLowerCase()));
     console.log(`   Available to add: ${available.length}`);
     return available;
   }, [allUsers, groupMembers]);
@@ -53,7 +53,6 @@ const AddGroupMembersModal = ({
     const query = searchQuery.toLowerCase();
     return availableUsers.filter(
       (user) =>
-        user.userName?.toLowerCase().includes(query) ||
         user.name?.toLowerCase().includes(query) ||
         user.email?.toLowerCase().includes(query)
     );
@@ -70,12 +69,12 @@ const AddGroupMembersModal = ({
   };
 
   const handleAddMember = (user) => {
-    console.log("📝 [ADD MEMBERS MODAL] User selected to add:", user.name || user.userName);
+    console.log("📝 [ADD MEMBERS MODAL] User selected to add:", user.name);
     onAddMember(user);
   };
 
   const handleRemoveMember = (user) => {
-    console.log("🗑️ [ADD MEMBERS MODAL] User selected to remove:", user.name || user.userName);
+    console.log("🗑️ [ADD MEMBERS MODAL] User selected to remove:", user.name);
     onRemoveMember(user.id);
   };
 

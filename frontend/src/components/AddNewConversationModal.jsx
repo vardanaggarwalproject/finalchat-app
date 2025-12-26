@@ -66,7 +66,7 @@ const AddNewConversationModal = ({
   }, [debouncedSearchQuery, availableUsers]);
 
   const handleUserSelect = (user) => {
-    console.log("📝 [ADD CONVERSATION] User selected:", user.name || user.userName);
+    console.log("📝 [ADD CONVERSATION] User selected:", user.name);
     onUserSelect(user);
     setSearchQuery(""); // Clear search
     onOpenChange(false); // Close modal

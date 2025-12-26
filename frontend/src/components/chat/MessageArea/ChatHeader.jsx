@@ -50,11 +50,9 @@ const ChatHeader = () => {
               <span className="font-bold text-slate-800 leading-tight truncate max-w-[150px] sm:max-w-xs text-[15px]">
                 {selectedUser.name}
               </span>
-              {!selectedUser.isOnline && (
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  Offline
-                </span>
-              )}
+              <span className={`text-[10px] font-bold uppercase tracking-wider ${selectedUser.isOnline ? 'text-green-500' : 'text-slate-400'}`}>
+                {selectedUser.isOnline ? 'Online' : 'Offline'}
+              </span>
             </div>
           </>
         ) : (

@@ -29,7 +29,10 @@ const CreateGroupModal = ({ isOpen, onClose }) => {
   const [search, setSearch] = useState("");
 
   const toggleMember = (id) => {
-    setSelectedMembers(prev => prev.includes(id) ? prev.filter(mid => mid !== id) : [...prev, id]);
+    const standardizedId = String(id).toLowerCase();
+    setSelectedMembers(prev => prev.some(mid => mid.toLowerCase() === standardizedId) 
+      ? prev.filter(mid => mid.toLowerCase() !== standardizedId) 
+      : [...prev, standardizedId]);
   };
 
   const handleCreate = async () => {
@@ -69,8 +72,8 @@ const CreateGroupModal = ({ isOpen, onClose }) => {
   };
 
   const filteredUsers = allUsers.filter(u => 
-    u.userName?.toLowerCase().includes(search.toLowerCase()) || 
-    u.name?.toLowerCase().includes(search.toLowerCase())
+    u.name?.toLowerCase().includes(search.toLowerCase()) ||
+    u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
@@ -113,7 +116,7 @@ const CreateGroupModal = ({ isOpen, onClose }) => {
                     )}
                   </div>
                   <span className="flex-1 text-sm font-medium">{user.name}</span>
-                  {selectedMembers.includes(user.id) && <Check className="w-4 h-4 text" />}
+                  {selectedMembers.some(mid => mid.toLowerCase() === String(user.id).toLowerCase()) && <Check className="w-4 h-4 text" />}
                 </div>
               ))}
             </div>

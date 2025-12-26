@@ -37,7 +37,8 @@ export const getCurrentUser = async (req, res) => {
 
 export const getAllUsers = async (req, res) => {
   try {
-    const currentUserId = req.userId;
+    const currentUserIdRaw = req.userId;
+    const currentUserId = String(currentUserIdRaw).toLowerCase();
     const activeUsers = req.activeUsers;
 
     console.log(`\n🔍 [GET_ALL_USERS] Starting optimized fetch for User: ${currentUserId}`);
@@ -54,7 +55,7 @@ export const getAllUsers = async (req, res) => {
         lastSeen: usersTable.lastSeen,
       })
       .from(usersTable)
-      .where(ne(usersTable.id, currentUserId));
+      .where(ne(sql`${usersTable.id}::text`, currentUserId));
 
     console.log(`   - Found ${users.length} other users in DB`);
 
@@ -91,7 +92,7 @@ export const getAllUsers = async (req, res) => {
       )
       .groupBy(messagesTable.senderId);
     
-    const unreadMap = new Map(unreadCounts.map(c => [String(c.senderId), c.count]));
+    const unreadMap = new Map(unreadCounts.map(c => [String(c.senderId).toLowerCase(), c.count]));
 
     // 4. Fetch ALL last messages for the current user in a SINGLE optimized query
     // Use DISTINCT ON to get the latest message per conversation
@@ -156,7 +157,7 @@ export const getAllUsers = async (req, res) => {
 
         return {
           ...user,
-          isOnline: activeUsers ? activeUsers.has(userIdStr) : user.isOnline,
+          isOnline: activeUsers ? activeUsers.has(userIdStr) : (user.isOnline || false),
           lastMessage: lastMessage,
           unreadCount: unreadMap.get(userIdStr) || 0,
           hasChat,
@@ -271,7 +272,7 @@ export const updateUserProfile = async (req, res) => {
     // console.log(" Updated user data:", updatedUser);
 
     // Store updated user in response for middleware to broadcast
-    res.locals.updatedUser = updatedUser;
+    res.locals.updatedUser = { ...updatedUser, id: String(updatedUser.id).toLowerCase() };
 
     res.status(200).json({ message: "Profile updated successfully", user: updatedUser });
   } catch (error) {
