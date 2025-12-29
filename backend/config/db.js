@@ -17,6 +17,7 @@ pool.on("error", (err) => {
   console.error("DATABASE ERROR:", err);
 });
 
+
 // Test connection
 (async () => {
   try {
